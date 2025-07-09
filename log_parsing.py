@@ -243,4 +243,8 @@ def compute_task_duration_by_index_v2(df: pd.DataFrame) -> pd.DataFrame:
         'transform_type', 'start_time', 'end_time',
         'total_pause_seconds', 'duration_seconds'])
 
+    # remove columns start_time, end_time, total_pause_seconds
+    duration_df = duration_df.drop(
+        columns=['start_time', 'end_time', 'total_pause_seconds'])
+
     return duration_df
