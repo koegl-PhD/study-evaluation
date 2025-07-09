@@ -13,7 +13,7 @@ from statannotations.Annotator import Annotator
 from statsmodels.stats.multitest import multipletests
 
 
-from registrationViewer.registrationViewerLib import log_evaluation
+import log_evaluation
 
 
 # mean durations
