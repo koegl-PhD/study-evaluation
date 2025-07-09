@@ -13,7 +13,7 @@ from statannotations.Annotator import Annotator
 from statsmodels.stats.multitest import multipletests
 
 
-import log_evaluation
+import log_parsing
 
 
 # mean durations
@@ -23,7 +23,7 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
     Supports 'bar' (mean ± std) and 'violin' plots.
     Excludes task_ids containing 'training' and orders transform types.
     """
-    df_duration = log_evaluation.compute_task_duration_by_index_v2(df)
+    df_duration = log_parsing.compute_task_duration_by_index_v2(df)
     df_filtered = df_duration[~df_duration['patient_id'].str.contains(
         'training')]
     transform_order = ['TransformType.NONE',
@@ -104,7 +104,7 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
     For each task_id, do pairwise t-tests comparing transform types on duration_seconds.
     Apply Bonferroni correction.
     """
-    df_duration = log_evaluation.compute_task_duration_by_index_v2(df)
+    df_duration = log_parsing.compute_task_duration_by_index_v2(df)
     df_filtered = df_duration[~df_duration['patient_id'].str.contains(
         'training')]
     results = []

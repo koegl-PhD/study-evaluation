@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-import log_evaluation
+import log_parsing
 import all_evaluations
+import study_data_handling
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', 0)  # 0 means auto-detect the terminal width
@@ -13,9 +14,15 @@ path_log = r"/home/fryderyk/Downloads/rad_test/rad_test.log"
 path_gt = r"/home/fryderyk/Downloads/SerielleCTs_nii_forHumans_annotations"
 path_rt = r"/home/fryderyk/Downloads/rad_test"
 
-df = log_evaluation.load_log_v2_to_df(path_log)
+df = log_parsing.load_log_v2_to_df(path_log)
 
-df_duration = log_evaluation.compute_task_duration_by_index_v2(df)
+df_duration = log_parsing.compute_task_duration_by_index_v2(df)
+
+df_duration['result_abs'] = None
+df_duration['result_rel'] = None
+
+b = study_data_handling.insert_bifurcations(
+    df_duration, path_gt, path_rt, tolerance=2)
 
 # all_evaluations.plot_duration_by_task_and_transform(
 #     df, type='bar', significance=True)
