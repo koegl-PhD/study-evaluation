@@ -1,10 +1,12 @@
-import pandas as pd
+from typing import Any, Dict, Optional
+
 import numpy as np
+import pandas as pd
 
 
-def load_log_v2_to_df(file_path):
+def load_log_v2_to_df(file_path: str) -> pd.DataFrame:
     with open(file_path, "r") as file:
-        rows = []
+        rows: list[Dict[str, Any] | None] = []
         for line in file:
             parsed = parse_log_line_v2(line)
             if parsed:
@@ -12,7 +14,7 @@ def load_log_v2_to_df(file_path):
     return pd.DataFrame(rows)
 
 
-def parse_log_line_v2(line):
+def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
     parts = line.strip().split(" ~ ")
     if len(parts) < 10:
         return None
@@ -44,7 +46,7 @@ def parse_log_line_v2(line):
     }
 
 
-def compute_scroll_stats_grouped_v2(df):
+def compute_scroll_stats_grouped_v2(df: pd.DataFrame) -> pd.DataFrame:
     # --- Slider Scroll ---
     slider_df = df[df['action'] == 'Slider_Scroll'].copy()
     slider_df = slider_df[slider_df['detail'].notnull()]
@@ -83,7 +85,7 @@ def compute_scroll_stats_grouped_v2(df):
     return combined_stats
 
 
-def compute_task_scroll_stats_v2(df):
+def compute_task_scroll_stats_v2(df: pd.DataFrame) -> pd.DataFrame:
     # --- Helper to extract 2D coordinates from either format ---
     def extract_pos_2d(df):
         pos_xy = df['detail'].str.extract(r'\(([-+]?\d+),\s*([-+]?\d+)\)')
@@ -158,7 +160,7 @@ def compute_task_scroll_stats_v2(df):
     return merged
 
 
-def extract_task_start_end_times(df):
+def extract_task_start_end_times(df: pd.DataFrame) -> pd.DataFrame:
     """Extracts start and end times for each task."""
     task_control_df = df[(df['event_type'] == 'U_BUTTON') & (
         df['action'].isin(['User started task', 'Next task']))].copy()
@@ -176,7 +178,7 @@ def extract_task_start_end_times(df):
     return duration_df
 
 
-def extract_pause_resume_pairs(df):
+def extract_pause_resume_pairs(df: pd.DataFrame) -> pd.DataFrame:
     """Extracts and pairs pause and resume events for each task, including both 'User paused study' and 'User clicked on info button' as pause events."""
     # Both types of pause events
     pause_df = df[(df['event_type'] == 'U_BUTTON') & (
@@ -202,7 +204,7 @@ def extract_pause_resume_pairs(df):
     return pause_resume_df
 
 
-def sum_pause_durations(pause_resume_df):
+def sum_pause_durations(pause_resume_df: pd.DataFrame) -> pd.DataFrame:
     """Sums pause durations for each task."""
     pause_resume_df['pause_duration'] = (
         pause_resume_df['resume_time'] - pause_resume_df['pause_time']).dt.total_seconds()
