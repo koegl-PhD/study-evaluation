@@ -95,10 +95,14 @@ def get_gt_bifurcation_locations(path_gt: str, patient_id: str) -> Dict[str, np.
     return bifurcations
 
 
-def insert_bifurcations(df_duration: pd.DataFrame, path_gt: str, path_rt: str) -> pd.DataFrame:
+def insert_bifurcations(
+        df_duration: pd.DataFrame,
+        path_gt: str,
+        path_rt: str,
+        tolerance: float) -> pd.DataFrame:
     # has to be the df_duration
 
-    columns_duration: list[LiteralString] = "user_id patient_id task_id task_index transform_type duration_seconds".split()
+    columns_duration: list[LiteralString] = "user_id patient_id task_id task_index transform_type duration_seconds gt rt result_abs result_rel".split()
 
     if df_duration.columns.tolist() != columns_duration:
         raise ValueError(
@@ -106,5 +110,25 @@ def insert_bifurcations(df_duration: pd.DataFrame, path_gt: str, path_rt: str) -
 
     points_rt = get_rt_bifurcation_locations(path_rt, r"0f9SYhwcPFc")
     points_gt = get_gt_bifurcation_locations(path_gt, r"0f9SYhwcPFc")
+
+    if points_rt.keys() != points_gt.keys():
+        raise ValueError(
+            f"RT bifurcation keys {points_rt.keys()} do not match GT bifurcation keys {points_gt.keys()}")
+    if len(points_rt) != 4:
+        raise ValueError(
+            f"Expected 4 bifurcations, found {len(points_rt)} in RT data")
+    if len(points_gt) != 4:
+        raise ValueError(
+            f"Expected 4 bifurcations, found {len(points_gt)} in GT data")
+
+    for index, row in df_duration.iterrows():
+
+        t = str(row['task_id'])
+
+        if row['task_id'] in ['a_vertebralis_r', 'a_vertebralis_l', 'a_carotisexterna_r', 'a_carotisexterna_l']:
+
+            norm = np.linalg.norm(points_gt[t] - points_rt[t])
+            df_duration.at[index, 'result_rel'] = norm
+            df_duration.at[index, 'result_abs'] = norm < tolerance
 
     x = 0
