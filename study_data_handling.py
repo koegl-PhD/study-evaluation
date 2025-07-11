@@ -1,12 +1,17 @@
 import glob
 import json
 
-from typing import Any, Dict, List, LiteralString
+from typing import Any, Dict, List, LiteralString, Optional
 
 import numpy as np
 import pandas as pd
 
 import utils
+
+####################################################################################
+####################  PATHS  #######################################################
+####################################################################################
+#### RT PATHS ####
 
 
 def get_rt_bifurcation_paths(path_rt: str, patient_id: str) -> List[str]:
@@ -34,6 +39,25 @@ def get_rt_lymphnode_path(path_rt: str, patient_id: str) -> str:
             f"Expected 1 lymph node file for patient {patient_id}, found {len(files)}")
 
     return files[0]
+
+
+def get_rt_recurrence_path(path_rt: str, patient_id: str) -> Optional[str]:
+    path_patient = f"{path_rt}/{patient_id}/*/"
+
+    file_recurrence_txt = glob.glob(path_patient + "recurrence_present.txt")[0]
+
+    if not utils.did_rad_check_recurrence(file_recurrence_txt):
+        return None
+
+    files = glob.glob(path_patient + "*recurrence_*.mrk.json")
+
+    if len(files) != 1:
+        raise FileNotFoundError(
+            f"Expected 1 recurrence file for patient {patient_id}, found {len(files)}")
+
+    return files[0]
+
+#### GT PATHS ####
 
 
 def get_gt_bifurcation_path(path_gt: str, patient_id: str) -> str:
@@ -78,13 +102,42 @@ def get_gt_lymphnode_path(path_gt: str, patient_id: str) -> str:
                     study_b + "/annotations/roi_lymphnode*.mrk.json")
                 if len(path_lymphnodes) != 1:
                     raise FileNotFoundError(
-                        f"Expected 1 lymph node file for patient {patient_id}, found {len(path_points)}")
+                        f"Expected 1 lymph node file for patient {patient_id}, found {len(path_lymphnodes)}")
                 return path_lymphnodes[0]
 
     raise FileNotFoundError(
         f"Patient {patient_id} not found in {path_gt}")
 
 
+def get_gt_recurrence_path(path_gt: str, patient_id: str) -> Optional[str]:
+    categories = glob.glob(path_gt + "/*")
+    for category in categories:
+        patients = glob.glob(category + "/*")
+
+        for patient in patients:
+            if patient_id in patient:
+                path = patient + "/preprocessed"
+
+                folders_studies = glob.glob(path + "/*")
+                folders_studies.sort()
+                study_b = folders_studies[1]
+
+                path_recurrence = glob.glob(
+                    study_b + "/annotations/roi_recurrence*.mrk.json")
+                if len(path_recurrence) == 0:
+                    return None
+                elif len(path_recurrence) > 1:
+                    raise FileExistsError(
+                        f"Multiple recurrence files found for patient {patient_id}")
+                return path_recurrence[0]
+
+    return None
+
+
+####################################################################################
+####################  LOCATIONS  ###################################################
+####################################################################################
+#### RT LOCATIONS ####
 def get_rt_bifurcation_locations(path_rt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
     """
     Get bifurcation locations from the RT files.
@@ -125,6 +178,29 @@ def get_rt_lymphnode_location(path_rt: str, patient_id: str) -> np.ndarray[Any, 
         position = data_json['markups'][0]['controlPoints'][0]['position']
 
     return np.array(position)
+
+
+def get_rt_recurrence_location(path_rt: str, patient_id: str) -> Optional[np.ndarray[Any, Any]]:
+    """
+    Get recurrence location from the RT files.
+    :param path_rt: Path to the RT files.
+    :param patient_id: Patient ID to filter the files.
+    :return: Recurrence location as a numpy array, or None if no recurrence is present.
+    """
+    path = get_rt_recurrence_path(path_rt, patient_id)
+
+    if path is None:
+        return None
+
+    with open(path, 'r') as f:
+        data = f.read()
+        data_json = json.loads(data)
+
+        position = data_json['markups'][0]['controlPoints'][0]['position']
+
+    return np.array(position)
+
+#### GT LOCATIONS ####
 
 
 def get_gt_bifurcation_locations(path_gt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
@@ -170,23 +246,42 @@ def get_gt_lymphnode(path_gt: str, patient_id: str) -> Dict[str, np.ndarray[Any,
     return {"center": np.array(center), "size": np.array(size)}
 
 
+def get_gt_recurrence(path_gt: str, patient_id: str) -> Optional[Dict[str, np.ndarray[Any, Any]]]:
+    """
+    Get recurrence location from the GT files.
+    :param path_gt: Path to the GT files.
+    :param patient_id: Patient ID to filter the files.
+    :return: Recurrence location as a numpy array, or None if no recurrence is present.
+    """
+    path = get_gt_recurrence_path(path_gt, patient_id)
+
+    if path is None:
+        return None
+
+    with open(path, 'r') as f:
+        data = f.read()
+        data_json = json.loads(data)
+
+        roi = data_json['markups'][0]
+        center = np.array(roi['center'])
+        size = np.array(roi['size'])
+
+        return {'center': center, 'size': size}
+
+
 def insert_bifurcations(
-        df_duration: pd.DataFrame,
+        df: pd.DataFrame,
         path_gt: str,
         path_rt: str,
-        tolerance: float) -> pd.DataFrame:
-    # has to be the df_duration
+        tolerance: float
+) -> pd.DataFrame:
 
-    df_duration['result_abs'] = None
-    df_duration['result_rel'] = None
+    name_abs = f"bifurcation_abs_{tolerance}"
 
-    columns_duration: list[LiteralString] = "user_id patient_id task_id task_index transform_type duration_seconds result_abs result_rel".split()
+    df[name_abs] = None
+    df['bifurcation_rel'] = None
 
-    if df_duration.columns.tolist() != columns_duration:
-        raise ValueError(
-            f"df_duration columns {df_duration.columns.tolist()} do not match expected {columns_duration}")
-
-    for index, row in df_duration.iterrows():
+    for index, row in df.iterrows():
 
         t = str(row['task_id'])
 
@@ -197,27 +292,28 @@ def insert_bifurcations(
                 path_gt, row['patient_id'])
 
             norm = np.linalg.norm(points_gt[t] - points_rt[t])
-            df_duration.at[index, 'result_rel'] = norm
-            df_duration.at[index, 'result_abs'] = norm < tolerance
+            df.at[index, 'bifurcation_rel'] = norm
+            df.at[index, name_abs] = norm < tolerance
 
-    return df_duration
+    return df
 
 
 def insert_lymphnodes(
-        df_duration: pd.DataFrame,
+        df: pd.DataFrame,
         path_gt: str,
-        path_rt: str) -> pd.DataFrame:
+        path_rt: str
+) -> pd.DataFrame:
     """
-    Insert lymph node locations into the DataFrame.
-    :param df_duration: DataFrame with task durations.
+    Insert lymph node locations into the DataFrame. If rt point is inside the GT lymph node, set lymph_node_abs to True, otherwise False.
+    :param df: DataFrame with task durations.
     :param path_gt: Path to the ground truth files.
     :param path_rt: Path to the RT files.
     :return: DataFrame with lymph node locations.
     """
-    df_duration['lymph_node_abs'] = None
-    df_duration['lymph_node_rel'] = None
 
-    for index, row in df_duration.iterrows():
+    df['lymph_node_abs'] = None
+
+    for index, row in df.iterrows():
 
         task = str(row['task_id'])
 
@@ -230,12 +326,46 @@ def insert_lymphnodes(
             # check if lymphnode_center_rt is inside the GT lymph node
             center = lymph_node_gt['center']
             size = lymph_node_gt['size']
-            df_duration.at[index, 'lymph_node_abs'] = utils.is_point_in_ROI(
+            df.at[index, 'lymph_node_abs'] = utils.is_point_in_ROI(
                 lymphnode_center_rt, center, size)
-            df_duration.at[index, 'lymph_node_rel'] = np.linalg.norm(
-                lymphnode_center_rt - center)
 
-    return df_duration
+    return df
+
+
+def insert_recurrence(
+        df: pd.DataFrame,
+        path_gt: str,
+        path_rt: str
+) -> pd.DataFrame:
+
+    df['recurrence_abs'] = None
+
+    for index, row in df.iterrows():
+        if row['task_id'] == 'recurrence':
+            recurrence_rt = get_rt_recurrence_location(
+                path_rt, row['patient_id'])
+            recurrence_gt = get_gt_recurrence(
+                path_gt, row['patient_id'])
+
+            if recurrence_gt is None and recurrence_rt is None:
+                df.at[index, 'recurrence_abs'] = True
+                continue
+            elif recurrence_gt is None and recurrence_rt is not None:
+                df.at[index, 'recurrence_abs'] = False
+                continue
+            elif recurrence_gt is not None and recurrence_rt is None:
+                df.at[index, 'recurrence_abs'] = False
+                continue
+            elif recurrence_gt is not None and recurrence_rt is not None:
+                pass
+
+            # check if recurrence_rt is inside the GT recurrence ROI
+            center = recurrence_gt['center']
+            size = recurrence_gt['size']
+            df.at[index, 'recurrence_abs'] = utils.is_point_in_ROI(
+                recurrence_rt, center, size)
+
+    return df
 
 
 def insert_study_results(
@@ -246,6 +376,9 @@ def insert_study_results(
 ) -> pd.DataFrame:
 
     df = insert_bifurcations(df, path_gt, path_rt, tolerance_bifurcations)
+
     df = insert_lymphnodes(df, path_gt, path_rt)
+
+    df = insert_recurrence(df, path_gt, path_rt)
 
     return df

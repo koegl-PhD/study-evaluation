@@ -17,3 +17,19 @@ def is_point_in_ROI(point: np.ndarray[Any, Any], center: np.ndarray[Any, Any], s
     local_point = point - center
 
     return bool(np.all(np.abs(local_point) <= size_half))
+
+
+def did_rad_check_recurrence(path_recurrence: str) -> bool:
+    """
+    Check if the recurrence annotation file exists and is not empty.
+
+    :param path_recurrence: Path to the recurrence annotation file.
+    :return: True if the file exists and is not empty, False otherwise.
+    """
+    try:
+        with open(path_recurrence, 'r') as f:
+            data = f.read().strip()
+            return data == 'True'
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Recurrence annotation file not found at {path_recurrence}")
