@@ -1,13 +1,16 @@
 from typing import Tuple, List
+
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
+from scipy.stats import chi2_contingency, f_oneway, kruskal
 
 import log_parsing
 import all_evaluations
 import study_data_handling
 
 pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 260)
 pd.set_option('display.width', 0)  # 0 means auto-detect the terminal width
 
 path_log = r"/home/fryderyk/Downloads/rad_test/rad_test.log"
@@ -18,11 +21,39 @@ df = log_parsing.load_log_v2_to_df(path_log)
 
 df_duration = log_parsing.compute_task_duration_by_index_v2(df)
 
-df_duration['result_abs'] = None
-df_duration['result_rel'] = None
+df_bifurcations = study_data_handling.insert_bifurcations(
+    df_duration, path_gt, path_rt, tolerance=5)
+df_bifurcations = df_bifurcations[~df_bifurcations['patient_id'].str.contains(
+    'training')]
 
-b = study_data_handling.insert_bifurcations(
-    df_duration, path_gt, path_rt, tolerance=2)
+df_l = study_data_handling.insert_lymphnodes(
+    df_bifurcations, path_gt, path_rt)
+
+df_only_lymph = df_l[df_l['lymph_node_abs'].notna()]
+
+df_clean = df_bifurcations.dropna(subset=['result_abs'])
+contingency = pd.crosstab(df_clean['transform_type'], df_clean['result_abs'])
+chi2, p, dof, expected = chi2_contingency(contingency)
+summary: pd.DataFrame = pd.crosstab(
+    df_clean['transform_type'], df_clean['result_abs'])
+
+print(f"Chi2: {chi2:.4f}, p-value: {p:.4f}")
+print(summary)
+
+df_clean = df_bifurcations.dropna(subset=['result_rel'])
+# group values by transform_type
+groups = [group['result_rel'].values for name,
+          group in df_clean.groupby('transform_type')]
+
+# ANOVA
+f_stat, p_val = f_oneway(*groups)
+print(f"ANOVA F: {f_stat:.4f}, p-value: {p_val:.4f}")
+
+# If non-normal: Kruskal-Wallis
+h_stat, p_kw = kruskal(*groups)
+print(f"Kruskal H: {h_stat:.4f}, p-value: {p_kw:.4f}")
+
+x = 0
 
 # all_evaluations.plot_duration_by_task_and_transform(
 #     df, type='bar', significance=True)
@@ -45,6 +76,12 @@ tpr, fpr, tnr, fnr, accuracy, result = all_evaluations.get_recurrence_present_va
 path = "/home/fryderyk/Documents/code/registrationViewer/stats.csv"
 # stats.to_csv(path, index=False)
 
+# df_sorted = df.sort_values(by="result_rel", ascending=False)
+
+
+path_tre = r"/home/fryderyk/Documents/code/registrationViewer/tres_linear_deformable.csv"
+df_tre = pd.read_csv(path_tre)
+df_tre = df_tre[~df_tre['patient_id'].str.contains('training')]
 
 x = 0
 

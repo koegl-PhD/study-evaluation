@@ -105,8 +105,7 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
     Apply Bonferroni correction.
     """
     df_duration = log_parsing.compute_task_duration_by_index_v2(df)
-    df_filtered = df_duration[~df_duration['patient_id'].str.contains(
-        'training')]
+    df_filtered = df_duration[~df_duration['patient_id'].str.contains('training')]
     results = []
 
     for task_id, group in df_filtered.groupby('task_id'):
