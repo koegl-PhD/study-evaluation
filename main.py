@@ -24,6 +24,16 @@ def main(
 
         df_rad = log_parsing.load_log_v2_to_df(path_log)
 
+        df_grouped = log_parsing.compute_scroll_stats_grouped_v2(df_rad)
+        # find all indices where two consecutive task_index are the same
+
+        df_scroll = log_parsing.compute_task_scroll_stats_v2(df_rad)
+
+        common_keys = ['user_id', 'patient_id',
+                       'transform_type', 'task_id', 'task_index']
+        merged = df_grouped.merge(
+            df_scroll, how='outer', on=common_keys).fillna(0)
+
         df_rad = log_parsing.compute_task_duration_by_index_v2(df_rad)
 
         df_rad = study_data_handling.insert_study_results(
@@ -44,7 +54,7 @@ res = 83
 
 if __name__ == "__main__":
     pd.set_option('display.max_columns', None)
-    pd.set_option('display.max_rows', 260)
+    pd.set_option('display.max_rows', 20)
     pd.set_option('display.width', 0)  # 0 means auto-detect the terminal width
 
     path_radiologists = r"/home/fryderyk/Downloads"
