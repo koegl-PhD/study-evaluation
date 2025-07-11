@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,71 @@ def load_log_v2_to_df(file_path: str) -> pd.DataFrame:
             parsed = parse_log_line_v2(line)
             if parsed:
                 rows.append(parsed)
+
+    rows = clear_user_started_study(rows)
+
+    rows = clear_specific(rows, 'action', 'Organiser started study')
+    rows = clear_specific(rows, 'action', 'UI set to simple')
+    rows = clear_specific(rows, 'action', 'All chunks')
+    rows = clear_specific(rows, 'action', 'Chunk ')
+    rows = clear_specific(rows, 'action', '\t')
+    rows = clear_specific(rows, 'action', 'All tasks to be done')
+    rows = clear_specific(rows, 'action', 'Combination')
+    rows = clear_specific(rows, 'action', 'Start loading study data chunk')
+    rows = clear_specific(rows, 'action', 'Finished loading study data chunk')
+    rows = clear_specific(rows, 'action', 'User closed study description')
+    rows = clear_specific(
+        rows, 'action', 'User closed training study description')
+    rows = clear_specific(rows, 'action', 'Start task')
+    rows = clear_specific(rows, 'action', 'User started next patient')
+    rows = clear_specific(rows, 'action', 'Point saved')
+    rows = clear_specific(rows, 'action', 'No recurrence to save')
+    rows = clear_specific(
+        rows, 'action', 'Start clearing current study data chunk')
+    rows = clear_specific(
+        rows, 'action', 'Done clearing current study data chunk')
+    rows = clear_specific(rows, 'action', 'User closed study begins')
+
     return pd.DataFrame(rows)
+
+
+def clear_user_started_study(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+
+    number_of_occurrences = sum(
+        1 for row in rows if row['action'].startswith('User started study'))
+
+    for _ in range(number_of_occurrences):
+        index_started_study = -1
+        for i, row in enumerate(rows):
+            if row['action'].startswith('User started study'):
+                index_started_study = i
+                break
+
+        index_closed_info_popup = -1
+        for i, row in enumerate(rows):
+            if row['action'].startswith('User closed info popup'):
+                index_closed_info_popup = i
+                break
+        if index_started_study == -1 or index_closed_info_popup == -1:
+            raise ValueError(
+                "Could not find 'User started study' or 'User closed info popup' in rows"
+            )
+
+        if index_started_study > index_closed_info_popup:
+            raise ValueError(
+                f"Index of 'User started study' ({index_started_study}) must be less than index of 'User closed info popup' ({index_closed_info_popup})"
+            )
+
+        rows = rows[:index_started_study] + rows[index_closed_info_popup + 1:]
+
+    return rows
+
+
+def clear_specific(rows: List[Dict[str, str]], content_type: str, content: str) -> List[Dict[str, str]]:
+    """
+    Clear all rows that contain a specific content in a specific column.
+    """
+    return [row for row in rows if not row[content_type].startswith(content)]
 
 
 def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
@@ -78,9 +142,32 @@ def compute_scroll_stats_grouped_v2(df: pd.DataFrame) -> pd.DataFrame:
                        1.0: 'wheel_scroll_d_1_count'}, inplace=True)
 
     # Merge both stats
-    combined_stats = pd.merge(slider_stats, wheel_stats, on=[
-                              'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer')
-    combined_stats.fillna(0, inplace=True)
+    keys = ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    base_df = df[keys].drop_duplicates()
+
+    combined_stats = (
+        base_df
+        .merge(slider_stats, how='left', on=keys)
+        .merge(wheel_stats,  how='left', on=keys)
+        .fillna(0)
+    )
+
+    combined_stats = combined_stats[~combined_stats['patient_id'].str.contains(
+        'training')]
+
+    if len(combined_stats) != 240:
+        raise ValueError(
+            f"Expected 240 rows, got {len(combined_stats)}. Check the input data.")
+
+    combined_stats = combined_stats.reset_index(drop=True)
+
+    combined_stats["wheel_scroll_distance_c"] = combined_stats["wheel_scroll_d_-1_count"] + \
+        combined_stats["wheel_scroll_d_1_count"]
+    combined_stats = combined_stats.drop(
+        columns=["wheel_scroll_d_-1_count", "wheel_scroll_d_1_count"])
+
+    combined_stats = combined_stats.rename(
+        columns={"slider_total_distance": "slider_total_distance_mm"})
 
     return combined_stats
 
@@ -146,17 +233,40 @@ def compute_task_scroll_stats_v2(df: pd.DataFrame) -> pd.DataFrame:
         columns={'d_delta': 'zoom_total_d_distance'}, inplace=True)
 
     # Merge all statistics
-    from functools import reduce
-    merged = reduce(lambda left, right: pd.merge(
-        left, right, on=['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer'),
-        result_frames)
+    keys = ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    base_df = df[keys].drop_duplicates()
 
-    merged = pd.merge(merged, zoom_d_sum, on=[
-                      'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer')
-    merged = pd.merge(merged, zoom_d_dist, on=[
-                      'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer')
+    merged = base_df
+    for stats in result_frames:
+        merged = merged.merge(stats, on=keys, how='left')
+
+    merged = merged.merge(zoom_d_sum,  on=keys, how='left')
+    merged = merged.merge(zoom_d_dist, on=keys, how='left')
 
     merged.fillna(0, inplace=True)
+
+    merged = merged[~merged['patient_id'].str.contains(
+        'training')]
+
+    if len(merged) != 240:
+        raise ValueError(
+            f"Expected 240 rows, got {len(merged)}. Check the input data.")
+
+    merged = merged.reset_index(drop=True)
+
+    # we don't need zoom_total_d_change and zoom_total_d_distance - we have the pixel distance
+    merged.drop(columns=['zoom_total_d_change'], inplace=True)
+    merged.drop(columns=['zoom_total_d_distance'], inplace=True)
+
+    merged = merged.rename(
+        columns={"pan_total_distance": "pan_total_distance_px"})
+    merged = merged.rename(
+        columns={"zoom_total_distance": "zoom_total_distance_px"})
+    merged = merged.rename(
+        columns={"window_level_total_distance": "window_level_total_distance_px"})
+    merged = merged.rename(
+        columns={"drag_scroll_total_distance": "drag_scroll_total_distance_px"})
+
     return merged
 
 
