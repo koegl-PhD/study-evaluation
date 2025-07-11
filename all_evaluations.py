@@ -105,8 +105,7 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
     Apply Bonferroni correction.
     """
     df_duration = log_parsing.compute_task_duration_by_index_v2(df)
-    df_filtered = df_duration[~df_duration['patient_id'].str.contains(
-        'training')]
+    df_filtered = df_duration[~df_duration['patient_id'].str.contains('training')]
     results = []
 
     for task_id, group in df_filtered.groupby('task_id'):
@@ -142,7 +141,7 @@ def is_point_inside_roi(
     return np.all(np.abs(local_point) <= size_np)
 
 
-def get_recurrence_gt():
+def get_gt_recurrence():
 
     path_neg = "/home/koeglf/data/registrationStudy/SerielleCTs_nii_forHumans/negative"
     path_pos = "/home/koeglf/data/registrationStudy/SerielleCTs_nii_forHumans/positive"
