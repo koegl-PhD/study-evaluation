@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -142,9 +142,24 @@ def compute_scroll_stats_grouped_v2(df: pd.DataFrame) -> pd.DataFrame:
                        1.0: 'wheel_scroll_d_1_count'}, inplace=True)
 
     # Merge both stats
-    combined_stats = pd.merge(slider_stats, wheel_stats, on=[
-                              'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer')
-    combined_stats.fillna(0, inplace=True)
+    keys = ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    base_df = df[keys].drop_duplicates()
+
+    combined_stats = (
+        base_df
+        .merge(slider_stats, how='left', on=keys)
+        .merge(wheel_stats,  how='left', on=keys)
+        .fillna(0)
+    )
+
+    combined_stats = combined_stats[~combined_stats['patient_id'].str.contains(
+        'training')]
+
+    if len(combined_stats) != 240:
+        raise ValueError(
+            f"Expected 240 rows, got {len(combined_stats)}. Check the input data.")
+
+    combined_stats = combined_stats.reset_index(drop=True)
 
     return combined_stats
 
