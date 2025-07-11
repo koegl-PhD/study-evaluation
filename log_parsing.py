@@ -11,7 +11,71 @@ def load_log_v2_to_df(file_path: str) -> pd.DataFrame:
             parsed = parse_log_line_v2(line)
             if parsed:
                 rows.append(parsed)
+
+    rows = clear_user_started_study(rows)
+
+    rows = clear_specific(rows, 'action', 'Organiser started study')
+    rows = clear_specific(rows, 'action', 'UI set to simple')
+    rows = clear_specific(rows, 'action', 'All chunks')
+    rows = clear_specific(rows, 'action', 'Chunk ')
+    rows = clear_specific(rows, 'action', '\t')
+    rows = clear_specific(rows, 'action', 'All tasks to be done')
+    rows = clear_specific(rows, 'action', 'Combination')
+    rows = clear_specific(rows, 'action', 'Start loading study data chunk')
+    rows = clear_specific(rows, 'action', 'Finished loading study data chunk')
+    rows = clear_specific(rows, 'action', 'User closed study description')
+    rows = clear_specific(
+        rows, 'action', 'User closed training study description')
+    rows = clear_specific(rows, 'action', 'Start task')
+    rows = clear_specific(rows, 'action', 'User started next patient')
+    rows = clear_specific(rows, 'action', 'Point saved')
+    rows = clear_specific(rows, 'action', 'No recurrence to save')
+    rows = clear_specific(
+        rows, 'action', 'Start clearing current study data chunk')
+    rows = clear_specific(
+        rows, 'action', 'Done clearing current study data chunk')
+    rows = clear_specific(rows, 'action', 'User closed study begins')
+
     return pd.DataFrame(rows)
+
+
+def clear_user_started_study(rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+
+    number_of_occurrences = sum(
+        1 for row in rows if row['action'].startswith('User started study'))
+
+    for _ in range(number_of_occurrences):
+        index_started_study = -1
+        for i, row in enumerate(rows):
+            if row['action'].startswith('User started study'):
+                index_started_study = i
+                break
+
+        index_closed_info_popup = -1
+        for i, row in enumerate(rows):
+            if row['action'].startswith('User closed info popup'):
+                index_closed_info_popup = i
+                break
+        if index_started_study == -1 or index_closed_info_popup == -1:
+            raise ValueError(
+                "Could not find 'User started study' or 'User closed info popup' in rows"
+            )
+
+        if index_started_study > index_closed_info_popup:
+            raise ValueError(
+                f"Index of 'User started study' ({index_started_study}) must be less than index of 'User closed info popup' ({index_closed_info_popup})"
+            )
+
+        rows = rows[:index_started_study] + rows[index_closed_info_popup + 1:]
+
+    return rows
+
+
+def clear_specific(rows: List[Dict[str, str]], content_type: str, content: str) -> List[Dict[str, str]]:
+    """
+    Clear all rows that contain a specific content in a specific column.
+    """
+    return [row for row in rows if not row[content_type].startswith(content)]
 
 
 def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
