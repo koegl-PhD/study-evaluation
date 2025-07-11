@@ -22,3 +22,5 @@ df = log_parsing.load_log_v2_to_df(path_log)
 df = log_parsing.compute_task_duration_by_index_v2(df)
 
 df = study_data_handling.insert_study_results(df, path_gt, path_rt, 5)
+
+x = 0
