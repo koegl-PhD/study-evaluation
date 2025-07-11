@@ -225,17 +225,27 @@ def compute_task_scroll_stats_v2(df: pd.DataFrame) -> pd.DataFrame:
         columns={'d_delta': 'zoom_total_d_distance'}, inplace=True)
 
     # Merge all statistics
-    from functools import reduce
-    merged = reduce(lambda left, right: pd.merge(
-        left, right, on=['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer'),
-        result_frames)
+    keys = ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    base_df = df[keys].drop_duplicates()
 
-    merged = pd.merge(merged, zoom_d_sum, on=[
-                      'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer')
-    merged = pd.merge(merged, zoom_d_dist, on=[
-                      'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='outer')
+    merged = base_df
+    for stats in result_frames:
+        merged = merged.merge(stats, on=keys, how='left')
+
+    merged = merged.merge(zoom_d_sum,  on=keys, how='left')
+    merged = merged.merge(zoom_d_dist, on=keys, how='left')
 
     merged.fillna(0, inplace=True)
+
+    merged = merged[~merged['patient_id'].str.contains(
+        'training')]
+
+    if len(merged) != 240:
+        raise ValueError(
+            f"Expected 240 rows, got {len(merged)}. Check the input data.")
+
+    merged = merged.reset_index(drop=True)
+
     return merged
 
 
