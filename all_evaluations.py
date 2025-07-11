@@ -141,7 +141,7 @@ def is_point_inside_roi(
     return np.all(np.abs(local_point) <= size_np)
 
 
-def get_recurrence_gt():
+def get_gt_recurrence():
 
     path_neg = "/home/koeglf/data/registrationStudy/SerielleCTs_nii_forHumans/negative"
     path_pos = "/home/koeglf/data/registrationStudy/SerielleCTs_nii_forHumans/positive"

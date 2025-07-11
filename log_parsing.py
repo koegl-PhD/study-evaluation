@@ -247,4 +247,7 @@ def compute_task_duration_by_index_v2(df: pd.DataFrame) -> pd.DataFrame:
     duration_df = duration_df.drop(
         columns=['start_time', 'end_time', 'total_pause_seconds'])
 
+    duration_df = duration_df[~duration_df['patient_id'].str.contains(
+        'training')]
+
     return duration_df

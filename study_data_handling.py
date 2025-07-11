@@ -24,28 +24,16 @@ def get_rt_bifurcation_paths(path_rt: str, patient_id: str) -> List[str]:
     return files
 
 
-def get_rt_bifurcation_locations(path_rt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
-    """
-    Get bifurcation locations from the RT files.
-    :param path_rt: Path to the RT files.
-    :param patient_id: Patient ID to filter the files.
-    :return: List of bifurcation locations as numpy arrays.
-    """
-    paths = get_rt_bifurcation_paths(path_rt, patient_id)
+def get_rt_lymphnode_path(path_rt: str, patient_id: str) -> str:
+    path_patient = f"{path_rt}/{patient_id}/*/"
 
-    bifurcations = {}
-    for path in paths:
-        bifurcation_name: str = '_'.join(path.split('/')[-1].split('_')[:3])
+    files = glob.glob(path_patient + "*lymph_node_*.mrk.json")
 
-        with open(path, 'r') as f:
-            data = f.read()
-            data_json = json.loads(data)
+    if len(files) != 1:
+        raise FileNotFoundError(
+            f"Expected 1 lymph node file for patient {patient_id}, found {len(files)}")
 
-            point = data_json['markups'][0]['controlPoints'][0]['position']
-
-            bifurcations[bifurcation_name] = np.array(point)
-
-    return bifurcations
+    return files[0]
 
 
 def get_gt_bifurcation_path(path_gt: str, patient_id: str) -> str:
@@ -73,6 +61,72 @@ def get_gt_bifurcation_path(path_gt: str, patient_id: str) -> str:
         f"Patient {patient_id} not found in {path_gt}")
 
 
+def get_gt_lymphnode_path(path_gt: str, patient_id: str) -> str:
+    categories = glob.glob(path_gt + "/*")
+    for category in categories:
+        patients = glob.glob(category + "/*")
+
+        for patient in patients:
+            if patient_id in patient:
+                path = patient + "/preprocessed"
+
+                folders_studies = glob.glob(path + "/*")
+                folders_studies.sort()
+                study_b = folders_studies[1]
+
+                path_lymphnodes = glob.glob(
+                    study_b + "/annotations/roi_lymphnode*.mrk.json")
+                if len(path_lymphnodes) != 1:
+                    raise FileNotFoundError(
+                        f"Expected 1 lymph node file for patient {patient_id}, found {len(path_points)}")
+                return path_lymphnodes[0]
+
+    raise FileNotFoundError(
+        f"Patient {patient_id} not found in {path_gt}")
+
+
+def get_rt_bifurcation_locations(path_rt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
+    """
+    Get bifurcation locations from the RT files.
+    :param path_rt: Path to the RT files.
+    :param patient_id: Patient ID to filter the files.
+    :return: List of bifurcation locations as numpy arrays.
+    """
+    paths = get_rt_bifurcation_paths(path_rt, patient_id)
+
+    bifurcations = {}
+    for path in paths:
+        bifurcation_name: str = '_'.join(path.split('/')[-1].split('_')[:3])
+
+        with open(path, 'r') as f:
+            data = f.read()
+            data_json = json.loads(data)
+
+            point = data_json['markups'][0]['controlPoints'][0]['position']
+
+            bifurcations[bifurcation_name] = np.array(point)
+
+    return bifurcations
+
+
+def get_rt_lymphnode_location(path_rt: str, patient_id: str) -> np.ndarray[Any, Any]:
+    """
+    Get lymph node location from the RT files.
+    :param path_rt: Path to the RT files.
+    :param patient_id: Patient ID to filter the files.
+    :return: Lymph node location as a numpy array.
+    """
+    path = get_rt_lymphnode_path(path_rt, patient_id)
+
+    with open(path, 'r') as f:
+        data = f.read()
+        data_json = json.loads(data)
+
+        position = data_json['markups'][0]['controlPoints'][0]['position']
+
+    return np.array(position)
+
+
 def get_gt_bifurcation_locations(path_gt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
     """
     Get bifurcation locations from the GT files.
@@ -95,6 +149,25 @@ def get_gt_bifurcation_locations(path_gt: str, patient_id: str) -> Dict[str, np.
             bifurcations[bifurcation_name] = np.array(position)
 
     return bifurcations
+
+
+def get_gt_lymphnode(path_gt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
+    """
+    Get lymph node location from the GT files.
+    :param path_gt: Path to the GT files.
+    :param patient_id: Patient ID to filter the files.
+    :return: Lymph node location as a numpy array.
+    """
+    path = get_gt_lymphnode_path(path_gt, patient_id)
+
+    with open(path, 'r') as f:
+        data = f.read()
+        data_json = json.loads(data)
+
+        center = data_json['markups'][0]['center']
+        size = data_json['markups'][0]['size']
+
+    return {"center": np.array(center), "size": np.array(size)}
 
 
 def insert_bifurcations(
@@ -130,79 +203,6 @@ def insert_bifurcations(
     return df_duration
 
 
-def get_rt_lymphnode_path(path_rt: str, patient_id: str) -> str:
-    path_patient = f"{path_rt}/{patient_id}/*/"
-
-    files = glob.glob(path_patient + "*lymph_node_*.mrk.json")
-
-    if len(files) != 1:
-        raise FileNotFoundError(
-            f"Expected 1 lymph node file for patient {patient_id}, found {len(files)}")
-
-    return files[0]
-
-
-def get_rt_lymphnode_location(path_rt: str, patient_id: str) -> np.ndarray[Any, Any]:
-    """
-    Get lymph node location from the RT files.
-    :param path_rt: Path to the RT files.
-    :param patient_id: Patient ID to filter the files.
-    :return: Lymph node location as a numpy array.
-    """
-    path = get_rt_lymphnode_path(path_rt, patient_id)
-
-    with open(path, 'r') as f:
-        data = f.read()
-        data_json = json.loads(data)
-
-        position = data_json['markups'][0]['controlPoints'][0]['position']
-
-    return np.array(position)
-
-
-def get_gt_lymphnode_path(path_gt: str, patient_id: str) -> str:
-    categories = glob.glob(path_gt + "/*")
-    for category in categories:
-        patients = glob.glob(category + "/*")
-
-        for patient in patients:
-            if patient_id in patient:
-                path = patient + "/preprocessed"
-
-                folders_studies = glob.glob(path + "/*")
-                folders_studies.sort()
-                study_b = folders_studies[1]
-
-                path_lymphnodes = glob.glob(
-                    study_b + "/annotations/roi_lymphnode*.mrk.json")
-                if len(path_lymphnodes) != 1:
-                    raise FileNotFoundError(
-                        f"Expected 1 lymph node file for patient {patient_id}, found {len(path_points)}")
-                return path_lymphnodes[0]
-
-    raise FileNotFoundError(
-        f"Patient {patient_id} not found in {path_gt}")
-
-
-def get_gt_lymphnode(path_gt: str, patient_id: str) -> Dict[str, np.ndarray[Any, Any]]:
-    """
-    Get lymph node location from the GT files.
-    :param path_gt: Path to the GT files.
-    :param patient_id: Patient ID to filter the files.
-    :return: Lymph node location as a numpy array.
-    """
-    path = get_gt_lymphnode_path(path_gt, patient_id)
-
-    with open(path, 'r') as f:
-        data = f.read()
-        data_json = json.loads(data)
-
-        center = data_json['markups'][0]['center']
-        size = data_json['markups'][0]['size']
-
-    return {"center": np.array(center), "size": np.array(size)}
-
-
 def insert_lymphnodes(
         df_duration: pd.DataFrame,
         path_gt: str,
@@ -236,3 +236,16 @@ def insert_lymphnodes(
                 lymphnode_center_rt - center)
 
     return df_duration
+
+
+def insert_study_results(
+    df: pd.DataFrame,
+    path_gt: str,
+    path_rt: str,
+    tolerance_bifurcations: float
+) -> pd.DataFrame:
+
+    df = insert_bifurcations(df, path_gt, path_rt, tolerance_bifurcations)
+    df = insert_lymphnodes(df, path_gt, path_rt)
+
+    return df
