@@ -161,6 +161,14 @@ def compute_scroll_stats_grouped_v2(df: pd.DataFrame) -> pd.DataFrame:
 
     combined_stats = combined_stats.reset_index(drop=True)
 
+    combined_stats["wheel_scroll_distance_c"] = combined_stats["wheel_scroll_d_-1_count"] + \
+        combined_stats["wheel_scroll_d_1_count"]
+    combined_stats = combined_stats.drop(
+        columns=["wheel_scroll_d_-1_count", "wheel_scroll_d_1_count"])
+
+    combined_stats = combined_stats.rename(
+        columns={"slider_total_distance": "slider_total_distance_mm"})
+
     return combined_stats
 
 
@@ -245,6 +253,19 @@ def compute_task_scroll_stats_v2(df: pd.DataFrame) -> pd.DataFrame:
             f"Expected 240 rows, got {len(merged)}. Check the input data.")
 
     merged = merged.reset_index(drop=True)
+
+    # we don't need zoom_total_d_change and zoom_total_d_distance - we have the pixel distance
+    merged.drop(columns=['zoom_total_d_change'], inplace=True)
+    merged.drop(columns=['zoom_total_d_distance'], inplace=True)
+
+    merged = merged.rename(
+        columns={"pan_total_distance": "pan_total_distance_px"})
+    merged = merged.rename(
+        columns={"zoom_total_distance": "zoom_total_distance_px"})
+    merged = merged.rename(
+        columns={"window_level_total_distance": "window_level_total_distance_px"})
+    merged = merged.rename(
+        columns={"drag_scroll_total_distance": "drag_scroll_total_distance_px"})
 
     return merged
 
