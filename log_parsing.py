@@ -110,7 +110,7 @@ def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFrame:
+def compute_combined_scroll_and_task_stats_v2_old(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute slider, wheel, pan, zoom, window/level, and drag scroll statistics per task.
     """
@@ -224,6 +224,130 @@ def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFr
         },
         inplace=True
     )
+
+    return out
+
+
+def _extract_pos_2d(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract x, y coordinates from detail field."""
+    pos = df['detail'].str.extract(
+        r'\(([-+]?\d+),\s*([-+]?\d+)\)').astype(float)
+    return pos.rename(columns={0: 'x', 1: 'y'})
+
+
+def _extract_d(df: pd.DataFrame) -> pd.Series:
+    """Extract d value from detail field."""
+    return df['detail'].str.extract(r'd=([-+]?[0-9]*\.?[0-9]+)').astype(float)
+
+
+def _compute_slider_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
+    """Compute slider scroll stats."""
+    df = df[df['action'] == 'Slider_Scroll']
+    df = df[df['detail'].notnull()]
+    df['position'] = df['detail'].str.extract(
+        r'pos=([-+]?[0-9]*\.?[0-9]+)').astype(float)
+    df['position_shifted'] = df.groupby(group_keys)['position'].shift(1)
+    df['distance_delta'] = (df['position'] - df['position_shifted']).abs()
+    return df.groupby(group_keys).agg(
+        slider_total_distance=('distance_delta', 'sum'),
+        slider_usage_count=('position', 'count')
+    ).reset_index()
+
+
+def _compute_wheel_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
+    """Compute wheel scroll stats."""
+    df = df[df['action'] == 'Wheel_Scroll']
+    df = df[df['detail'].notnull()]
+    df['delta'] = df['detail'].str.extract(r'd=([-+]?\d+)').astype(float)
+    stats = df.groupby(group_keys)['delta'].value_counts().unstack(
+        fill_value=0).reset_index()
+    return stats.rename(columns={-1.0: 'wheel_scroll_d_-1_count', 1.0: 'wheel_scroll_d_1_count'})
+
+
+def _compute_positional_stats(df: pd.DataFrame, task: str, group_keys: list[str]) -> pd.DataFrame:
+    """Compute distance and count for a positional task including Zoom."""
+    sub = df[df['action'].str.startswith(task)].copy()
+    pos = _extract_pos_2d(sub)
+    sub = sub.join(pos)
+    sub[['x_prev', 'y_prev']] = sub.groupby(group_keys)[['x', 'y']].shift(1)
+    sub['distance'] = np.sqrt(
+        (sub['x'] - sub['x_prev'])**2 + (sub['y'] - sub['y_prev'])**2)
+    return sub.groupby(group_keys).agg(
+        **{f'{task.lower()}_total_distance': ('distance', 'sum'),
+           f'{task.lower()}_usage_count': ('x', 'count')}
+    ).reset_index()
+
+
+def _compute_zoom_d_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
+    """Compute zoom d-change and d-distance."""
+    sub = df[df['action'].str.startswith('Zoom')].copy()
+    sub['d_value'] = _extract_d(sub)
+    sub['d_prev'] = sub.groupby(group_keys)['d_value'].shift(1)
+    sub['d_delta'] = sub['d_value'] - sub['d_prev']
+    return sub.groupby(group_keys).agg(
+        zoom_total_d_change=('d_value', 'sum'),
+        zoom_total_d_distance=('d_delta', lambda x: x.abs().sum())
+    ).reset_index()
+
+
+def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute combined scroll and mouse-based task stats.
+    """
+
+    # define grouping columns for aggregation
+    group_keys = ['user_id', 'patient_id',
+                  'transform_type', 'task_id', 'task_index']
+    # sort once by group and time
+    df_sorted = df.sort_values(by=group_keys + ['timestamp'])
+
+    # compute slider and wheel stats
+    slider_stats = _compute_slider_stats(df_sorted, group_keys)
+    wheel_stats = _compute_wheel_stats(df_sorted, group_keys)
+
+    # filter only mouse events with detail or coordinates
+    base_mouse = df_sorted[df_sorted['event_type'] == 'U_MOUSE']
+    base_mouse = base_mouse[base_mouse['detail'].notnull() |
+                            base_mouse['action'].str.contains(r'\(\d+,')]
+
+    # compute positional stats for Pan, Zoom, Window_Level, Drag_Scroll
+    tasks = ['Pan', 'Zoom', 'Window_Level', 'Drag_Scroll']
+    positional_stats = [_compute_positional_stats(
+        base_mouse, t, group_keys) for t in tasks]
+    # compute zoom-specific d stats
+    zoom_d_stats = _compute_zoom_d_stats(base_mouse, group_keys)
+
+    # merge all stats into one DataFrame
+    base_keys = df[group_keys].drop_duplicates()
+    out = base_keys.merge(slider_stats, on=group_keys, how='left') \
+                   .merge(wheel_stats, on=group_keys, how='left')
+    for st in positional_stats:
+        out = out.merge(st, on=group_keys, how='left')
+    out = out.merge(zoom_d_stats, on=group_keys, how='left')
+
+    # fill missing, remove training, and validate row count
+    out.fillna(0, inplace=True)
+    out = out[~out['patient_id'].str.contains('training')]
+    if len(out) != 240:
+        raise ValueError(
+            f"Expected 240 rows, got {len(out)}. Check input data.")
+
+    # finalize counts and rename columns
+    out = out.reset_index(drop=True)
+    out['wheel_scroll_distance_c'] = (
+        out['wheel_scroll_d_-1_count'] + out['wheel_scroll_d_1_count']
+    )
+    out.drop(columns=[
+        'wheel_scroll_d_-1_count', 'wheel_scroll_d_1_count',
+        'zoom_total_d_change', 'zoom_total_d_distance'
+    ], inplace=True)
+    out.rename(columns={
+        'slider_total_distance': 'slider_total_distance_mm',
+        'pan_total_distance': 'pan_total_distance_px',
+        'zoom_total_distance': 'zoom_total_distance_px',
+        'window_level_total_distance': 'window_level_total_distance_px',
+        'drag_scroll_total_distance': 'drag_scroll_total_distance_px'
+    }, inplace=True)
 
     return out
 
