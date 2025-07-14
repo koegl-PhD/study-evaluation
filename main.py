@@ -31,7 +31,7 @@ def main(
         scroll_stats_new = log_parsing.aggregate_interaction_stats_new(
             df_rad)
 
-        if utils.df_equal(scroll_stats_old, scroll_stats_new, 1):
+        if utils.df_equal(scroll_stats_old, scroll_stats_new, 6):
             print(f"Scroll stats are equal for {rad_contents['path_log']}")
         else:
             print(f"Scroll stats differ for {rad_contents['path_log']}")
