@@ -110,19 +110,20 @@ def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFrame:
+def compute_combined_scroll_and_task_stats_v2_old(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute slider, wheel, pan, zoom, window/level, and drag scroll statistics per task.
     """
     group_keys = ['user_id', 'patient_id',
                   'transform_type', 'task_id', 'task_index']
+    # pre-sort once
+    df_sorted = df.sort_values(by=group_keys + ['timestamp'])
 
     # --- Slider Scroll ---
-    slider_df = df[df['action'] == 'Slider_Scroll'].copy()
+    slider_df = df_sorted[df_sorted['action'] == 'Slider_Scroll'].copy()
     slider_df = slider_df[slider_df['detail'].notnull()]
     slider_df['position'] = slider_df['detail'].str.extract(
         r'pos=([-+]?[0-9]*\.?[0-9]+)').astype(float)
-    slider_df.sort_values(by=group_keys + ['timestamp'], inplace=True)
     slider_df['position_shifted'] = slider_df.groupby(group_keys)[
         'position'].shift(1)
     slider_df['distance_delta'] = (
@@ -133,7 +134,7 @@ def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFr
     ).reset_index()
 
     # --- Wheel Scroll ---
-    wheel_df = df[df['action'] == 'Wheel_Scroll'].copy()
+    wheel_df = df_sorted[df_sorted['action'] == 'Wheel_Scroll'].copy()
     wheel_df = wheel_df[wheel_df['detail'].notnull()]
     wheel_df['delta'] = wheel_df['detail'].str.extract(
         r'd=([-+]?[0-9]+)').astype(float)
@@ -142,7 +143,7 @@ def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFr
     wheel_stats.rename(columns={-1.0: 'wheel_scroll_d_-1_count',
                        1.0: 'wheel_scroll_d_1_count'}, inplace=True)
 
-    # --- Helper functions ---
+    # --- Helpers ---
     def extract_pos_2d(sub_df: pd.DataFrame) -> pd.DataFrame:
         pos = sub_df['detail'].str.extract(
             r'\(([-+]?\d+),\s*([-+]?\d+)\)').astype(float)
@@ -152,7 +153,7 @@ def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFr
         return sub_df['detail'].str.extract(r'd=([-+]?[0-9]*\.?[0-9]+)').astype(float)
 
     # --- Mouse-based events ---
-    base_mouse = df[df['event_type'] == 'U_MOUSE'].copy()
+    base_mouse = df_sorted[df_sorted['event_type'] == 'U_MOUSE'].copy()
     base_mouse = base_mouse[
         base_mouse['detail'].notnull(
         ) | base_mouse['action'].str.contains(r'\(\d+,')
@@ -165,7 +166,6 @@ def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFr
         sub = base_mouse[base_mouse['action'].str.startswith(task)].copy()
         pos = extract_pos_2d(sub)
         sub = sub.join(pos)
-        sub.sort_values(by=group_keys + ['timestamp'], inplace=True)
         sub[['x_prev', 'y_prev']] = sub.groupby(
             group_keys)[['x', 'y']].shift(1)
         sub['distance'] = np.sqrt(
@@ -181,7 +181,6 @@ def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFr
     # --- Zoom-specific: d-based stats ---
     zoom_sub = base_mouse[base_mouse['action'].str.startswith('Zoom')].copy()
     zoom_sub['d_value'] = extract_d(zoom_sub)
-    zoom_sub.sort_values(by=group_keys + ['timestamp'], inplace=True)
     zoom_sub['d_prev'] = zoom_sub.groupby(group_keys)['d_value'].shift(1)
     zoom_sub['d_delta'] = zoom_sub['d_value'] - zoom_sub['d_prev']
     zoom_change = zoom_sub.groupby(group_keys)['d_value'].sum().reset_index().rename(

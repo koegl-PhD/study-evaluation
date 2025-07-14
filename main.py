@@ -26,12 +26,12 @@ def main(
 
         df_rad = log_parsing.load_log_v2_to_df(path_log)
 
-        scroll_stats_prev = log_parsing.compute_combined_scroll_and_task_stats_v2_prev(
+        scroll_stats_old = log_parsing.compute_combined_scroll_and_task_stats_v2_old(
             df_rad)
         scroll_stats_new = log_parsing.compute_combined_scroll_and_task_stats_v2_new(
             df_rad)
 
-        if utils.df_equal(scroll_stats_prev, scroll_stats_new):
+        if utils.df_equal(scroll_stats_old, scroll_stats_new):
             print(f"Scroll stats are equal for {rad_contents['path_log']}")
         else:
             print(f"Scroll stats differ for {rad_contents['path_log']}")
