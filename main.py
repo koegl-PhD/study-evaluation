@@ -3,11 +3,13 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_frame_equal
 from scipy.stats import chi2_contingency, f_oneway, kruskal
 
 import log_parsing
 import all_evaluations
 import study_data_handling
+import utils
 
 
 def main(
@@ -22,26 +24,24 @@ def main(
         path_log = str(rad_contents['path_log'])
         path_rt = str(rad_contents['path_rt'])
 
-        df_rad = log_parsing.load_log_v2_to_df(path_log)
+        df_rad = log_parsing.load_log_to_df(path_log)
 
-        df_grouped = log_parsing.compute_scroll_stats_grouped_v2(df_rad)
-        # find all indices where two consecutive task_index are the same
-
-        df_scroll = log_parsing.compute_task_scroll_stats_v2(df_rad)
-
-        common_keys = ['user_id', 'patient_id',
-                       'transform_type', 'task_id', 'task_index']
-        merged = df_grouped.merge(
-            df_scroll, how='outer', on=common_keys).fillna(0)
+        interaction_stats = log_parsing.aggregate_interaction_stats(
+            df_rad)
 
         df_rad = log_parsing.compute_task_duration_by_index_v2(df_rad)
 
         df_rad = study_data_handling.insert_study_results(
-            df_rad, path_gt, path_rt, 5)
+            df_rad,
+            path_gt,
+            path_rt, 5,
+            rad_contents)
 
-        df_rad.insert(loc=1, column="group", value=rad_contents['group'])
-        df_rad.insert(loc=1, column="experienced",
-                      value=rad_contents['experienced'])
+        df_rad = df_rad.merge(
+            right=interaction_stats,
+            on=["user_id", "patient_id", "transform_type", "task_id", "task_index"],
+            how="left"
+        )
 
         df.append(df_rad)
 
@@ -54,13 +54,17 @@ res = 83
 
 if __name__ == "__main__":
     pd.set_option('display.max_columns', None)
-    pd.set_option('display.max_rows', 20)
+    pd.set_option('display.max_rows', 40)
     pd.set_option('display.width', 0)  # 0 means auto-detect the terminal width
 
-    path_radiologists = r"/home/fryderyk/Downloads"
+    path_radiologists = r"/home/fryderyk/Downloads/study_results"
 
     participants: Dict[str, Dict[str, int | bool | str]] = {
         "rad_test": {
+            "group": 1,
+            "experienced": False,
+        },
+        "rad_1": {
             "group": 1,
             "experienced": False,
         }
@@ -72,3 +76,8 @@ if __name__ == "__main__":
     path_gt = r"/home/fryderyk/Downloads/SerielleCTs_nii_forHumans_annotations"
 
     main(path_gt, participants)
+
+# df[df['user_id'] == 'rad_test'][df['task_id'] ==
+#                                 'recurrence']['recurrence_abs'].value_counts()
+
+# df_sorted = df.sort_values(by="result_rel", ascending=False)

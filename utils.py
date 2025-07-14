@@ -1,5 +1,6 @@
 import numpy as np
-
+import pandas as pd
+from pandas.testing import assert_frame_equal
 
 from typing import Any
 
@@ -33,3 +34,18 @@ def did_rad_check_recurrence(path_recurrence: str) -> bool:
     except FileNotFoundError:
         raise FileNotFoundError(
             f"Recurrence annotation file not found at {path_recurrence}")
+
+
+def df_equal(df1: pd.DataFrame, df2: pd.DataFrame, drop_last_n: int = 0) -> bool:
+    """
+    Return True if two DataFrames have the same values, dtypes, indices, and columns.
+    """
+
+    if drop_last_n > 0:
+        df2 = df2.iloc[:, :-drop_last_n]
+
+    try:
+        assert_frame_equal(df1, df2, check_dtype=True, check_like=True)
+        return True
+    except AssertionError:
+        return False
