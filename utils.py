@@ -36,7 +36,7 @@ def did_rad_check_recurrence(path_recurrence: str) -> bool:
             f"Recurrence annotation file not found at {path_recurrence}")
 
 
-def df_equal(df1: pd.DataFrame, df2: pd.DataFrame, drop_last_n: int) -> bool:
+def df_equal(df1: pd.DataFrame, df2: pd.DataFrame, drop_last_n: int = 0) -> bool:
     """
     Return True if two DataFrames have the same values, dtypes, indices, and columns.
     """

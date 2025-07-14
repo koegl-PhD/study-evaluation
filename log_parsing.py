@@ -173,10 +173,29 @@ def compute_zoom_d_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFram
 
 
 def compute_double_click_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
-    """Compute double click counts per view."""
-    sub = df[df['action'] == 'Double click']
-    stats = sub.groupby(group_keys + ['detail']).size().unstack(fill_value=0)
-    stats.columns = [f'double_click_{col}' for col in stats.columns]
+    """
+    Compute double click counts per predefined view.
+    """
+
+    # select only double-click events
+    sub = df[df['action'] == 'Double click'].copy()
+
+    # treat detail as view identifier
+    sub['view'] = sub['detail']
+
+    # count occurrences per group and view
+    stats = sub.groupby(group_keys + ['view']).size().unstack(fill_value=0)
+
+    # ensure zero columns for all expected views
+    expected = ['Red1', 'Red2', 'Green1', 'Green2', 'Yellow1', 'Yellow2']
+    for v in expected:
+        if v not in stats.columns:
+            stats[v] = 0
+
+    # order columns and rename to include count suffix
+    stats = stats[expected]
+    stats.columns = [f'double_click_{v}_count' for v in expected]
+
     return stats.reset_index()
 
 
@@ -200,92 +219,85 @@ def compute_arrow_key_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataF
     return stats.reset_index()
 
 
-def aggregate_interaction_stats_new(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute combined scroll, mouse, arrow-key, and sync stats per task/view."""
+def aggregate_interaction_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute combined scroll, mouse, arrow-key, and sync stats per task/view.
+    """
+
+    # define grouping keys and sort by timestamp
     group_keys = ['user_id', 'patient_id',
                   'transform_type', 'task_id', 'task_index']
     df_sorted = df.sort_values(by=group_keys + ['timestamp'])
 
+    # compute slider and wheel stats
     slider_stats = compute_slider_stats(df_sorted, group_keys)
     wheel_stats = compute_wheel_stats(df_sorted, group_keys)
 
+    # filter mouse events with valid details or coordinates
     base_mouse = df_sorted[df_sorted['event_type'] == 'U_MOUSE']
     base_mouse = base_mouse[
         base_mouse['detail'].notnull() |
         base_mouse['action'].str.contains(r'\(\d+,')
     ]
 
+    # compute positional, zoom, double-click, arrow-key, and sync stats
     tasks = ['Pan', 'Zoom', 'Window_Level', 'Drag_Scroll']
-    positional_stats = [
-        compute_positional_stats(base_mouse, t, group_keys)
-        for t in tasks
-    ]
+    positional_stats = [compute_positional_stats(
+        base_mouse, t, group_keys) for t in tasks]
     zoom_d_stats = compute_zoom_d_stats(base_mouse, group_keys)
     double_click_stats = compute_double_click_stats(base_mouse, group_keys)
     arrow_stats = compute_arrow_key_stats(df_sorted, group_keys)
     sync_stats = compute_sync_stats(df_sorted, group_keys)
 
+    # start merge with unique base keys
     base_keys = df[group_keys].drop_duplicates()
-    out = (
-        base_keys
-        .merge(slider_stats, on=group_keys, how='left')
-        .merge(wheel_stats, on=group_keys, how='left')
-    )
+    out = base_keys.merge(slider_stats, on=group_keys, how='left') \
+                   .merge(wheel_stats, on=group_keys, how='left')
+    # merge all positional stats
     for stat in positional_stats:
         out = out.merge(stat, on=group_keys, how='left')
-    out = (
-        out
-        .merge(zoom_d_stats, on=group_keys, how='left')
-        .merge(double_click_stats, on=group_keys, how='left')
-        .merge(arrow_stats, on=group_keys, how='left')
-        .merge(sync_stats, on=group_keys, how='left')
-    )
+    # merge remaining stats
+    out = out.merge(zoom_d_stats, on=group_keys, how='left') \
+             .merge(double_click_stats, on=group_keys, how='left') \
+             .merge(arrow_stats, on=group_keys, how='left') \
+             .merge(sync_stats, on=group_keys, how='left')
 
+    # fill missing with zeros and exclude training data
     out.fillna(0, inplace=True)
     out = out[~out['patient_id'].str.contains('training')]
+
+    # verify row count
     if len(out) != 240:
         raise ValueError(
             f"Expected 240 rows, got {len(out)}. Check input data.")
 
+    # reset index and compute combined wheel scroll distance
     out.reset_index(drop=True, inplace=True)
-    out['wheel_scroll_distance_c'] = (
-        out['wheel_scroll_d_-1_count'] + out['wheel_scroll_d_1_count']
-    )
-    out.drop(
-        columns=[
-            'wheel_scroll_d_-1_count',
-            'wheel_scroll_d_1_count',
-            'zoom_total_d_change',
-            'zoom_total_d_distance'
-        ],
-        inplace=True
-    )
-    out.rename(
-        columns={
-            'slider_total_distance': 'slider_total_distance_mm',
-            'pan_total_distance': 'pan_total_distance_px',
-            'zoom_total_distance': 'zoom_total_distance_px',
-            'window_level_total_distance': 'window_level_total_distance_px',
-            'drag_scroll_total_distance': 'drag_scroll_total_distance_px'
-        },
-        inplace=True
-    )
+    out['wheel_scroll_distance_c'] = out['wheel_scroll_d_-1_count'] + \
+        out['wheel_scroll_d_1_count']
 
-    # reorder so arrow-key counts come at the very end
-    base_cols = [
-        c for c in out.columns
-        if not c.startswith(('double_click_', 'arrow_key_', 'synchronised_count'))
-        and c != 'wheel_scroll_distance_c'
-    ]
-    dbl_cols = [c for c in out.columns if c.startswith('double_click_')]
+    # drop intermediate columns and rename distances
+    out.drop(columns=[
+        'wheel_scroll_d_-1_count', 'wheel_scroll_d_1_count',
+        'zoom_total_d_change', 'zoom_total_d_distance'
+    ], inplace=True)
+    out.rename(columns={
+        'slider_total_distance': 'slider_total_distance_mm',
+        'pan_total_distance': 'pan_total_distance_px',
+        'zoom_total_distance': 'zoom_total_distance_px',
+        'window_level_total_distance': 'window_level_total_distance_px',
+        'drag_scroll_total_distance': 'drag_scroll_total_distance_px'
+    }, inplace=True)
+
+    # reorder columns: base, wheel dist, double-clicks, sync, then arrow-keys
+    base_cols = [c for c in out.columns
+                 if not c.startswith(('double_click_', 'arrow_key_', 'synchronised_count'))
+                 and c != 'wheel_scroll_distance_c']
+    expected = ['Red1', 'Red2', 'Green1', 'Green2', 'Yellow1', 'Yellow2']
+    dbl_cols = [f'double_click_{v}_count' for v in expected]
     arrow_cols = [c for c in out.columns if c.startswith('arrow_key_')]
-    out = out[
-        base_cols +
-        ['wheel_scroll_distance_c'] +
-        dbl_cols +
-        ['synchronised_count'] +
-        arrow_cols
-    ]
+    out = out[base_cols + ['wheel_scroll_distance_c'] +
+              dbl_cols + ['synchronised_count'] + arrow_cols]
 
     return out
 
