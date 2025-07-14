@@ -34,6 +34,9 @@ def main(
         merged = df_grouped.merge(
             df_scroll, how='outer', on=common_keys).fillna(0)
 
+        scroll_stats = log_parsing.compute_combined_scroll_and_task_stats_v2(
+            df_rad)
+
         df_rad = log_parsing.compute_task_duration_by_index_v2(df_rad)
 
         df_rad = study_data_handling.insert_study_results(
@@ -54,13 +57,17 @@ res = 83
 
 if __name__ == "__main__":
     pd.set_option('display.max_columns', None)
-    pd.set_option('display.max_rows', 20)
+    pd.set_option('display.max_rows', 40)
     pd.set_option('display.width', 0)  # 0 means auto-detect the terminal width
 
-    path_radiologists = r"/home/fryderyk/Downloads"
+    path_radiologists = r"/home/fryderyk/Downloads/study_results"
 
     participants: Dict[str, Dict[str, int | bool | str]] = {
         "rad_test": {
+            "group": 1,
+            "experienced": False,
+        },
+        "rad_1": {
             "group": 1,
             "experienced": False,
         }
@@ -72,3 +79,6 @@ if __name__ == "__main__":
     path_gt = r"/home/fryderyk/Downloads/SerielleCTs_nii_forHumans_annotations"
 
     main(path_gt, participants)
+
+df[df['user_id'] == 'rad_test'][df['task_id'] ==
+                                'recurrence']['recurrence_abs'].value_counts()

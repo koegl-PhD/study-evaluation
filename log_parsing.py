@@ -110,6 +110,140 @@ def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def compute_combined_scroll_and_task_stats_v2(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute slider, wheel, pan, zoom, window/level, and drag scroll statistics per task.
+    """
+    # --- Slider Scroll ---
+    slider_df = df[df['action'] == 'Slider_Scroll'].copy()
+    slider_df = slider_df[slider_df['detail'].notnull()]
+    slider_df['position'] = slider_df['detail'].str.extract(
+        r'pos=([-+]?[0-9]*\.?[0-9]+)').astype(float)
+    slider_df.sort_values(by=['user_id', 'patient_id', 'transform_type',
+                          'task_id', 'task_index', 'timestamp'], inplace=True)
+    slider_df['position_shifted'] = slider_df.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'])['position'].shift(1)
+    slider_df['distance_delta'] = (
+        slider_df['position'] - slider_df['position_shifted']).abs()
+    slider_stats = slider_df.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    ).agg(
+        slider_total_distance=('distance_delta', 'sum'),
+        slider_usage_count=('position', 'count')
+    ).reset_index()
+
+    # --- Wheel Scroll ---
+    wheel_df = df[df['action'] == 'Wheel_Scroll'].copy()
+    wheel_df = wheel_df[wheel_df['detail'].notnull()]
+    wheel_df['delta'] = wheel_df['detail'].str.extract(
+        r'd=([-+]?[0-9]+)').astype(float)
+    wheel_stats = wheel_df.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    )['delta'].value_counts().unstack(fill_value=0).reset_index()
+    wheel_stats.rename(
+        columns={-1.0: 'wheel_scroll_d_-1_count',
+                 1.0: 'wheel_scroll_d_1_count'},
+        inplace=True
+    )
+
+    # --- Helper functions ---
+    def extract_pos_2d(sub_df: pd.DataFrame) -> pd.DataFrame:
+        pos = sub_df['detail'].str.extract(
+            r'\(([-+]?\d+),\s*([-+]?\d+)\)').astype(float)
+        return pos.rename(columns={0: 'x', 1: 'y'})
+
+    def extract_d(sub_df: pd.DataFrame) -> pd.Series:
+        return sub_df['detail'].str.extract(r'd=([-+]?[0-9]*\.?[0-9]+)').astype(float)
+
+    # --- Mouse-based events ---
+    base_mouse = df[df['event_type'] == 'U_MOUSE'].copy()
+    base_mouse = base_mouse[
+        base_mouse['detail'].notnull(
+        ) | base_mouse['action'].str.contains(r'\(\d+,')
+    ]
+
+    task_types = ['Pan', 'Zoom', 'Window_Level', 'Drag_Scroll']
+    stats_list: list[pd.DataFrame] = []
+
+    for task in task_types:
+        sub = base_mouse[base_mouse['action'].str.startswith(task)].copy()
+        pos = extract_pos_2d(sub)
+        sub = sub.join(pos)
+        sub.sort_values(by=['user_id', 'patient_id', 'transform_type',
+                        'task_id', 'task_index', 'timestamp'], inplace=True)
+        sub[['x_prev', 'y_prev']] = sub.groupby(
+            ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+        )[['x', 'y']].shift(1)
+        sub['distance'] = np.sqrt(
+            (sub['x']-sub['x_prev'])**2 + (sub['y']-sub['y_prev'])**2)
+        agg = sub.groupby(
+            ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+        ).agg(
+            **{
+                f'{task.lower()}_total_distance': ('distance', 'sum'),
+                f'{task.lower()}_usage_count': ('x', 'count')
+            }
+        ).reset_index()
+        stats_list.append(agg)
+
+    # --- Zoom-specific: d-based stats ---
+    zoom_sub = base_mouse[base_mouse['action'].str.startswith('Zoom')].copy()
+    zoom_sub['d_value'] = extract_d(zoom_sub)
+    zoom_sub.sort_values(by=['user_id', 'patient_id', 'transform_type',
+                         'task_id', 'task_index', 'timestamp'], inplace=True)
+    zoom_sub['d_prev'] = zoom_sub.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    )['d_value'].shift(1)
+    zoom_sub['d_delta'] = zoom_sub['d_value'] - zoom_sub['d_prev']
+    zoom_change = zoom_sub.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    )['d_value'].sum().reset_index().rename(columns={'d_value': 'zoom_total_d_change'})
+    zoom_dist = zoom_sub.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    )['d_delta'].agg(lambda x: x.abs().sum()).reset_index().rename(columns={'d_delta': 'zoom_total_d_distance'})
+
+    # --- Merge all stats ---
+    keys = ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    base_keys = df[keys].drop_duplicates()
+    out = (
+        base_keys
+        .merge(slider_stats, on=keys, how='left')
+        .merge(wheel_stats, on=keys, how='left')
+    )
+    for st in stats_list:
+        out = out.merge(st, on=keys, how='left')
+    out = out.merge(zoom_change, on=keys, how='left').merge(
+        zoom_dist, on=keys, how='left')
+    out.fillna(0, inplace=True)
+    out = out[~out['patient_id'].str.contains('training')]
+
+    if len(out) != 240:
+        raise ValueError(
+            f"Expected 240 rows, got {len(out)}. Check the input data.")
+
+    out = out.reset_index(drop=True)
+    out['wheel_scroll_distance_c'] = (
+        out['wheel_scroll_d_-1_count'] + out['wheel_scroll_d_1_count']
+    )
+    out.drop(
+        columns=['wheel_scroll_d_-1_count', 'wheel_scroll_d_1_count',
+                 'zoom_total_d_change', 'zoom_total_d_distance'],
+        inplace=True
+    )
+    out.rename(
+        columns={
+            'slider_total_distance': 'slider_total_distance_mm',
+            'pan_total_distance': 'pan_total_distance_px',
+            'zoom_total_distance': 'zoom_total_distance_px',
+            'window_level_total_distance': 'window_level_total_distance_px',
+            'drag_scroll_total_distance': 'drag_scroll_total_distance_px'
+        },
+        inplace=True
+    )
+
+    return out
+
+
 def compute_scroll_stats_grouped_v2(df: pd.DataFrame) -> pd.DataFrame:
     # --- Slider Scroll ---
     slider_df = df[df['action'] == 'Slider_Scroll'].copy()
