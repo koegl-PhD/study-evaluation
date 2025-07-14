@@ -24,11 +24,11 @@ def main(
         path_log = str(rad_contents['path_log'])
         path_rt = str(rad_contents['path_rt'])
 
-        df_rad = log_parsing.load_log_v2_to_df(path_log)
+        df_rad = log_parsing.load_log_to_df(path_log)
 
-        scroll_stats_old = log_parsing.compute_combined_scroll_and_task_stats_v2_old(
+        scroll_stats_old = log_parsing.aggregate_interaction_stats_old(
             df_rad)
-        scroll_stats_new = log_parsing.compute_combined_scroll_and_task_stats_v2_new(
+        scroll_stats_new = log_parsing.aggregate_interaction_stats_new(
             df_rad)
 
         if utils.df_equal(scroll_stats_old, scroll_stats_new):
