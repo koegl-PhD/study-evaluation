@@ -180,7 +180,13 @@ def compute_double_click_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.Da
     return stats.reset_index()
 
 
-def aggregate_interaction_stats_new(df: pd.DataFrame) -> pd.DataFrame:
+def compute_sync_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
+    """Compute count of user synchronised views."""
+    sub = df[df['action'] == 'User synchronised views']
+    return sub.groupby(group_keys).size().reset_index(name='synchronised_count')
+
+
+def aggregate_interaction_stats_old(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute combined scroll and mouse-based task stats, including double clicks.
     """
@@ -242,49 +248,46 @@ def aggregate_interaction_stats_new(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def aggregate_interaction_stats_old(df: pd.DataFrame) -> pd.DataFrame:
+def aggregate_interaction_stats_new(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compute combined scroll and mouse-based task stats.
+    Compute combined scroll and mouse-based task stats, including double clicks and sync views.
     """
-
-    # define grouping columns for aggregation
     group_keys = ['user_id', 'patient_id',
                   'transform_type', 'task_id', 'task_index']
-    # sort once by group and time
     df_sorted = df.sort_values(by=group_keys + ['timestamp'])
 
-    # compute slider and wheel stats
     slider_stats = compute_slider_stats(df_sorted, group_keys)
     wheel_stats = compute_wheel_stats(df_sorted, group_keys)
 
-    # filter only mouse events with detail or coordinates
     base_mouse = df_sorted[df_sorted['event_type'] == 'U_MOUSE']
     base_mouse = base_mouse[base_mouse['detail'].notnull() |
                             base_mouse['action'].str.contains(r'\(\d+,')]
 
-    # compute positional stats for Pan, Zoom, Window_Level, Drag_Scroll
     tasks = ['Pan', 'Zoom', 'Window_Level', 'Drag_Scroll']
     positional_stats = [compute_positional_stats(
         base_mouse, t, group_keys) for t in tasks]
-    # compute zoom-specific d stats
     zoom_d_stats = compute_zoom_d_stats(base_mouse, group_keys)
+    double_click_stats = compute_double_click_stats(base_mouse, group_keys)
+    # use full df_sorted for sync
+    sync_stats = compute_sync_stats(df_sorted, group_keys)
 
-    # merge all stats into one DataFrame
     base_keys = df[group_keys].drop_duplicates()
-    out = base_keys.merge(slider_stats, on=group_keys, how='left') \
-                   .merge(wheel_stats, on=group_keys, how='left')
+    out = (base_keys
+           .merge(slider_stats, on=group_keys, how='left')
+           .merge(wheel_stats, on=group_keys, how='left'))
     for st in positional_stats:
         out = out.merge(st, on=group_keys, how='left')
-    out = out.merge(zoom_d_stats, on=group_keys, how='left')
+    out = (out
+           .merge(zoom_d_stats, on=group_keys, how='left')
+           .merge(double_click_stats, on=group_keys, how='left')
+           .merge(sync_stats, on=group_keys, how='left'))
 
-    # fill missing, remove training, and validate row count
     out.fillna(0, inplace=True)
     out = out[~out['patient_id'].str.contains('training')]
     if len(out) != 240:
         raise ValueError(
             f"Expected 240 rows, got {len(out)}. Check input data.")
 
-    # finalize counts and rename columns
     out = out.reset_index(drop=True)
     out['wheel_scroll_distance_c'] = (
         out['wheel_scroll_d_-1_count'] + out['wheel_scroll_d_1_count']
@@ -300,6 +303,13 @@ def aggregate_interaction_stats_old(df: pd.DataFrame) -> pd.DataFrame:
         'window_level_total_distance': 'window_level_total_distance_px',
         'drag_scroll_total_distance': 'drag_scroll_total_distance_px'
     }, inplace=True)
+
+    # reorder so wheel distance, double-clicks, then sync count at the very end
+    base_cols = [c for c in out.columns if not c.startswith(
+        ('double_click_', 'synchronised_count')) and c != 'wheel_scroll_distance_c']
+    dbl_cols = [c for c in out.columns if c.startswith('double_click_')]
+    out = out[base_cols + ['wheel_scroll_distance_c'] +
+              dbl_cols + ['synchronised_count']]
 
     return out
 
