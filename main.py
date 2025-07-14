@@ -3,11 +3,13 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_frame_equal
 from scipy.stats import chi2_contingency, f_oneway, kruskal
 
 import log_parsing
 import all_evaluations
 import study_data_handling
+import utils
 
 
 def main(
@@ -24,18 +26,15 @@ def main(
 
         df_rad = log_parsing.load_log_v2_to_df(path_log)
 
-        df_grouped = log_parsing.compute_scroll_stats_grouped_v2(df_rad)
-        # find all indices where two consecutive task_index are the same
-
-        df_scroll = log_parsing.compute_task_scroll_stats_v2(df_rad)
-
-        common_keys = ['user_id', 'patient_id',
-                       'transform_type', 'task_id', 'task_index']
-        merged = df_grouped.merge(
-            df_scroll, how='outer', on=common_keys).fillna(0)
-
-        scroll_stats = log_parsing.compute_combined_scroll_and_task_stats_v2(
+        scroll_stats_prev = log_parsing.compute_combined_scroll_and_task_stats_v2_prev(
             df_rad)
+        scroll_stats_new = log_parsing.compute_combined_scroll_and_task_stats_v2_new(
+            df_rad)
+
+        if utils.df_equal(scroll_stats_prev, scroll_stats_new):
+            print(f"Scroll stats are equal for {rad_contents['path_log']}")
+        else:
+            print(f"Scroll stats differ for {rad_contents['path_log']}")
 
         df_rad = log_parsing.compute_task_duration_by_index_v2(df_rad)
 
