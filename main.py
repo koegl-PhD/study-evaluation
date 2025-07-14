@@ -32,11 +32,16 @@ def main(
         df_rad = log_parsing.compute_task_duration_by_index_v2(df_rad)
 
         df_rad = study_data_handling.insert_study_results(
-            df_rad, path_gt, path_rt, 5)
+            df_rad,
+            path_gt,
+            path_rt, 5,
+            rad_contents)
 
-        df_rad.insert(loc=1, column="group", value=rad_contents['group'])
-        df_rad.insert(loc=1, column="experienced",
-                      value=rad_contents['experienced'])
+        df_rad = df_rad.merge(
+            right=interaction_stats,
+            on=["user_id", "patient_id", "transform_type", "task_id", "task_index"],
+            how="left"
+        )
 
         df.append(df_rad)
 
@@ -72,5 +77,7 @@ if __name__ == "__main__":
 
     main(path_gt, participants)
 
-df[df['user_id'] == 'rad_test'][df['task_id'] ==
-                                'recurrence']['recurrence_abs'].value_counts()
+# df[df['user_id'] == 'rad_test'][df['task_id'] ==
+#                                 'recurrence']['recurrence_abs'].value_counts()
+
+# df_sorted = df.sort_values(by="result_rel", ascending=False)

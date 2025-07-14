@@ -372,7 +372,8 @@ def insert_study_results(
     df: pd.DataFrame,
     path_gt: str,
     path_rt: str,
-    tolerance_bifurcations: float
+    tolerance_bifurcations: float,
+    rad_contents: Dict[str, int | bool | str]
 ) -> pd.DataFrame:
 
     df = insert_bifurcations(df, path_gt, path_rt, tolerance_bifurcations)
@@ -380,5 +381,9 @@ def insert_study_results(
     df = insert_lymphnodes(df, path_gt, path_rt)
 
     df = insert_recurrence(df, path_gt, path_rt)
+
+    df.insert(loc=1, column="group", value=rad_contents['group'])
+    df.insert(loc=1, column="experienced",
+              value=rad_contents['experienced'])
 
     return df
