@@ -110,13 +110,12 @@ def parse_log_line_v2(line: str) -> Optional[Dict[str, Any]]:
     }
 
 
-def compute_combined_scroll_and_task_stats_v2_old(df: pd.DataFrame) -> pd.DataFrame:
+def compute_combined_scroll_and_task_stats_v2_new(df: pd.DataFrame) -> pd.DataFrame:
     """
     Compute slider, wheel, pan, zoom, window/level, and drag scroll statistics per task.
     """
     group_keys = ['user_id', 'patient_id',
                   'transform_type', 'task_id', 'task_index']
-    # pre-sort once
     df_sorted = df.sort_values(by=group_keys + ['timestamp'])
 
     # --- Slider Scroll ---
@@ -178,17 +177,15 @@ def compute_combined_scroll_and_task_stats_v2_old(df: pd.DataFrame) -> pd.DataFr
         ).reset_index()
         stats_list.append(agg)
 
-    # --- Zoom-specific: d-based stats ---
+    # --- Zoom-specific: combine change and distance in one agg ---
     zoom_sub = base_mouse[base_mouse['action'].str.startswith('Zoom')].copy()
     zoom_sub['d_value'] = extract_d(zoom_sub)
     zoom_sub['d_prev'] = zoom_sub.groupby(group_keys)['d_value'].shift(1)
     zoom_sub['d_delta'] = zoom_sub['d_value'] - zoom_sub['d_prev']
-    zoom_change = zoom_sub.groupby(group_keys)['d_value'].sum().reset_index().rename(
-        columns={'d_value': 'zoom_total_d_change'}
-    )
-    zoom_dist = zoom_sub.groupby(group_keys)['d_delta'].agg(lambda x: x.abs().sum()).reset_index().rename(
-        columns={'d_delta': 'zoom_total_d_distance'}
-    )
+    zoom_stats = zoom_sub.groupby(group_keys).agg(
+        zoom_total_d_change=('d_value', 'sum'),
+        zoom_total_d_distance=('d_delta', lambda x: x.abs().sum())
+    ).reset_index()
 
     # --- Merge all stats ---
     base_keys = df[group_keys].drop_duplicates()
@@ -199,8 +196,7 @@ def compute_combined_scroll_and_task_stats_v2_old(df: pd.DataFrame) -> pd.DataFr
     )
     for st in stats_list:
         out = out.merge(st, on=group_keys, how='left')
-    out = out.merge(zoom_change, on=group_keys, how='left').merge(
-        zoom_dist, on=group_keys, how='left')
+    out = out.merge(zoom_stats, on=group_keys, how='left')
     out.fillna(0, inplace=True)
     out = out[~out['patient_id'].str.contains('training')]
 
