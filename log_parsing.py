@@ -358,38 +358,76 @@ def sum_pause_durations(pause_resume_df: pd.DataFrame) -> pd.DataFrame:
     return pause_sums
 
 
-def compute_task_duration_by_index_v2(df: pd.DataFrame) -> pd.DataFrame:
-    # Ensure timestamp is in datetime format
-    df['timestamp'] = pd.to_datetime(
-        df['timestamp'], format="%Y-%m-%d %H:%M:%S,%f", errors='coerce')
+def extract_window_adjust_pairs(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract and pair window level adjustment start and end events."""
+    start_df = df[df['action'] == 'Start Window_Level'][
+        ['user_id', 'patient_id', 'transform_type',
+            'task_id', 'task_index', 'timestamp']
+    ].copy()
+    end_df = df[df['action'] == 'End Window_Level'][
+        ['user_id', 'patient_id', 'transform_type',
+            'task_id', 'task_index', 'timestamp']
+    ].copy()
+    start_df = start_df.rename(columns={'timestamp': 'adjust_start'})
+    end_df = end_df.rename(columns={'timestamp': 'adjust_end'})
+    return pd.merge_asof(
+        start_df.sort_values('adjust_start'),
+        end_df.sort_values('adjust_end'),
+        by=['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'],
+        left_on='adjust_start',
+        right_on='adjust_end',
+        direction='forward'
+    )
 
-    # Extract start and end times
+
+def sum_window_adjust_durations(df: pd.DataFrame) -> pd.DataFrame:
+    """Sum window level adjustment durations per task."""
+    df['adjust_duration'] = (
+        df['adjust_end'] - df['adjust_start']).dt.total_seconds()
+    totals = df.groupby(
+        ['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index']
+    )['adjust_duration'].sum().reset_index()
+    return totals.rename(columns={'adjust_duration': 'total_adjust_seconds'})
+
+
+def compute_task_duration(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute net task durations excluding pauses and window adjustments."""
+    df['timestamp'] = pd.to_datetime(
+        df['timestamp'], format="%Y-%m-%d %H:%M:%S,%f", errors='coerce'
+    )
+
+    # start/end extraction
     duration_df = extract_task_start_end_times(df)
 
-    # Extract pause/resume pairs and sum pause durations
-    pause_resume_df = extract_pause_resume_pairs(df)
-    pause_sums = sum_pause_durations(pause_resume_df)
+    # pause durations
+    pause_pairs = extract_pause_resume_pairs(df)
+    pause_sums = sum_pause_durations(pause_pairs)
+    duration_df = pd.merge(
+        duration_df, pause_sums,
+        on=['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'],
+        how='left'
+    ).fillna({'total_pause_seconds': 0})
 
-    # Merge pause sums into duration_df
-    duration_df = pd.merge(duration_df, pause_sums, on=[
-                           'user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'], how='left')
-    duration_df['total_pause_seconds'] = duration_df['total_pause_seconds'].fillna(
-        0)
+    # window adjustment durations
+    adjust_pairs = extract_window_adjust_pairs(df)
+    adjust_sums = sum_window_adjust_durations(adjust_pairs)
+    duration_df = pd.merge(
+        duration_df, adjust_sums,
+        on=['user_id', 'patient_id', 'transform_type', 'task_id', 'task_index'],
+        how='left'
+    ).fillna({'total_adjust_seconds': 0})
 
-    # Compute net duration
+    # compute net duration
     duration_df['duration_seconds'] = (
-        duration_df['end_time'] - duration_df['start_time']).dt.total_seconds() - duration_df['total_pause_seconds']
+        duration_df['end_time'] - duration_df['start_time']
+    ).dt.total_seconds() \
+        - duration_df['total_pause_seconds'] \
+        - duration_df['total_adjust_seconds']
 
-    duration_df = duration_df.reindex(columns=[
-        'user_id', 'patient_id', 'task_id', 'task_index',
-        'transform_type', 'start_time', 'end_time',
-        'total_pause_seconds', 'duration_seconds'])
-
-    # remove columns start_time, end_time, total_pause_seconds
-    duration_df = duration_df.drop(
-        columns=['start_time', 'end_time', 'total_pause_seconds'])
-
+    # tidy and filter
     duration_df = duration_df[~duration_df['patient_id'].str.contains(
         'training')]
-
-    return duration_df
+    return duration_df.drop(
+        columns=['start_time', 'end_time',
+                 'total_pause_seconds', 'total_adjust_seconds']
+    )

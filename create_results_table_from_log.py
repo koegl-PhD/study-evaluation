@@ -30,7 +30,7 @@ def main(
         interaction_stats = log_parsing.aggregate_interaction_stats(
             df_rad)
 
-        df_rad = log_parsing.compute_task_duration_by_index_v2(df_rad)
+        df_rad = log_parsing.compute_task_duration(df_rad)
 
         df_rad = study_data_handling.insert_study_results(
             df_rad,
