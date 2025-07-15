@@ -23,13 +23,11 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
     Supports 'bar' (mean ± std) and 'violin' plots.
     Excludes task_ids containing 'training' and orders transform types.
     """
-    df_duration = log_parsing.compute_task_duration_by_index_v2(df)
-    df_filtered = df_duration[~df_duration['patient_id'].str.contains(
-        'training')]
+
     transform_order = ['TransformType.NONE',
                        'TransformType.LINEAR', 'TransformType.NONLINEAR']
-    df_filtered['transform_type'] = pd.Categorical(
-        df_filtered['transform_type'],
+    df['transform_type'] = pd.Categorical(
+        df['transform_type'],
         categories=transform_order,
         ordered=True
     )
@@ -37,7 +35,7 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
     plt.figure(figsize=(12, 6))
     if type == 'bar':
         ax = sns.barplot(
-            data=df_filtered,
+            data=df,
             x='task_id',
             y='duration_seconds',
             hue='transform_type',
@@ -51,7 +49,7 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
 
     elif type == 'violin':
         ax = sns.violinplot(
-            data=df_filtered,
+            data=df,
             x='task_id',
             y='duration_seconds',
             hue='transform_type',
@@ -61,6 +59,8 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
         )
         plt.ylabel('Duration (seconds)')
         plt.title('Duration by Task and Transform Type')
+
+    test_results = None
 
     if significance:
         test_results = statistical_significance_duration(df)
@@ -77,25 +77,26 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
                 pairs.append(((t_id, t1), (t_id, t2)))
                 pvalues.append(row['pval_corrected'])
 
-        annotator = Annotator(ax, pairs, data=df_filtered,
-                              x='task_id', y='duration_seconds', hue='transform_type')
+        if pairs != []:
+            annotator = Annotator(ax, pairs, data=df,
+                                  x='task_id', y='duration_seconds', hue='transform_type')
 
-        line_height = .02 if type == 'bar' else .2
+            line_height = .02 if type == 'bar' else .2
 
-        annotator.configure(
-            test=None,
-            text_format='star',
-            line_height=line_height,
-        )
-        annotator.set_pvalues_and_annotate(pvalues)
-
-        return test_results
+            annotator.configure(
+                test=None,
+                text_format='star',
+                line_height=line_height,
+            )
+            annotator.set_pvalues_and_annotate(pvalues)
 
     plt.legend(title='Transform Type')
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
     plt.show()
 
+    if test_results is not None:
+        return test_results
     return None
 
 
@@ -104,12 +105,9 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
     For each task_id, do pairwise t-tests comparing transform types on duration_seconds.
     Apply Bonferroni correction.
     """
-    df_duration = log_parsing.compute_task_duration_by_index_v2(df)
-    df_filtered = df_duration[~df_duration['patient_id'].str.contains(
-        'training')]
     results = []
 
-    for task_id, group in df_filtered.groupby('task_id'):
+    for task_id, group in df.groupby('task_id'):
         types = group['transform_type'].unique()
         pairs = [(a, b) for i, a in enumerate(types) for b in types[i+1:]]
         for a, b in pairs:

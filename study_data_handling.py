@@ -338,7 +338,9 @@ def insert_recurrence(
         path_rt: str
 ) -> pd.DataFrame:
 
-    df['recurrence_abs'] = None
+    df['recurrence'] = None
+    df['recurrence'] = pd.Categorical(
+        df['recurrence'], categories=['tp', 'fp', 'tn', 'fn'])
 
     for index, row in df.iterrows():
         if row['task_id'] == 'recurrence':
@@ -347,23 +349,26 @@ def insert_recurrence(
             recurrence_gt = get_gt_recurrence(
                 path_gt, row['patient_id'])
 
-            if recurrence_gt is None and recurrence_rt is None:
-                df.at[index, 'recurrence_abs'] = True
-                continue
-            elif recurrence_gt is None and recurrence_rt is not None:
-                df.at[index, 'recurrence_abs'] = False
-                continue
-            elif recurrence_gt is not None and recurrence_rt is None:
-                df.at[index, 'recurrence_abs'] = False
-                continue
-            elif recurrence_gt is not None and recurrence_rt is not None:
-                pass
+            value = None
 
-            # check if recurrence_rt is inside the GT recurrence ROI
-            center = recurrence_gt['center']
-            size = recurrence_gt['size']
-            df.at[index, 'recurrence_abs'] = utils.is_point_in_ROI(
-                recurrence_rt, center, size)
+            if recurrence_gt is None and recurrence_rt is None:
+                value = 'tn'
+            elif recurrence_gt is None and recurrence_rt is not None:
+                value = 'fp'
+            elif recurrence_gt is not None and recurrence_rt is None:
+                value = 'fn'
+            elif recurrence_gt is not None and recurrence_rt is not None:
+
+                # check if recurrence_rt is inside the GT recurrence ROI
+                center = recurrence_gt['center']
+                size = recurrence_gt['size']
+
+                correct = utils.is_point_in_ROI(
+                    recurrence_rt, center, size)
+
+                value = 'tp' if correct else 'fp'
+
+            df.at[index, 'recurrence'] = value
 
     return df
 

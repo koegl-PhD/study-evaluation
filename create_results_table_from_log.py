@@ -10,6 +10,7 @@ import log_parsing
 import all_evaluations
 import study_data_handling
 import utils
+import analysis_functions
 
 
 def main(
@@ -47,10 +48,10 @@ def main(
 
     df = pd.concat(df, ignore_index=True)
 
+    df.to_csv('results.csv', index=False)
+
     x = 0
 
-
-res = 83
 
 if __name__ == "__main__":
     pd.set_option('display.max_columns', None)
