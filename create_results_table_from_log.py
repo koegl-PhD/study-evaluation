@@ -50,11 +50,6 @@ def main(
 
     df.to_csv('results.csv', index=False)
 
-    df = pd.read_csv('results.csv')
-
-    rec_test = analysis_functions.recurrence_tp_tn_fp_fn(
-        df[df['user_id'] == 'rad_test'])
-
     x = 0
 
 
