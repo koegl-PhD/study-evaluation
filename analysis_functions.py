@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -85,4 +87,53 @@ def plot_recurrence_vals(df: pd.DataFrame) -> None:
 
     plt.ylabel('Count')
     plt.title('Recurrence Classification per User')
+    plt.show()
+
+
+def plot_bifurcation_rel(df: pd.DataFrame) -> None:
+
+    # Example violin plot
+    sns.violinplot(data=df, x='user_id', y='bifurcation_rel')
+    plt.axhline(5, color='red', linestyle='--', label='Threshold = 5mm')
+
+    plt.xticks(
+        ticks=range(2),  # positions
+        labels=['Ihssan', 'Hannah'],  # your custom labels
+        rotation=45  # optional: rotate labels
+    )
+
+    plt.ylabel('bifurcation_rel distance')
+    plt.title('Bifurcation distance to GT per user')
+    plt.legend()
+    plt.show()
+
+
+def plot_lymph_node(df: pd.DataFrame) -> None:
+    """
+    Plot lymph node distances to GT for each user.
+    """
+
+    # Group and count
+    counts = (
+        df.groupby(['user_id', 'lymph_node_abs'])
+        .size()
+        .unstack(fill_value=0)
+    )
+
+    # Reverse order
+    counts = counts.iloc[::-1]
+
+    # Plot stacked bar
+    counts.plot(kind='bar', stacked=True)
+
+    plt.xticks(
+        ticks=range(2),  # positions
+        labels=['Ihssan', 'Hannah'],  # your custom labels
+        rotation=45  # optional: rotate labels
+    )
+
+    plt.ylabel('Count')
+    plt.title('Lymph Node Abs (True/False) per User')
+    plt.xticks(rotation=0)
+    plt.legend(title='lymph_node_abs')
     plt.show()
