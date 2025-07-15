@@ -101,27 +101,29 @@ def plot_duration_by_task_and_transform(df: pd.DataFrame, type: Literal['bar', '
 
 
 def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    For each task_id, do pairwise t-tests comparing transform types on duration_seconds.
-    Apply Bonferroni correction.
-    """
+    """Pairwise t-tests per task_id with Bonferroni correction within each task."""
     results = []
 
     for task_id, group in df.groupby('task_id'):
         types = group['transform_type'].unique()
         pairs = [(a, b) for i, a in enumerate(types) for b in types[i+1:]]
+        pvals = []
+        pair_labels = []
         for a, b in pairs:
             data_a = group[group['transform_type'] == a]['duration_seconds']
             data_b = group[group['transform_type'] == b]['duration_seconds']
             stat, pval = ttest_ind(data_a, data_b)
+            pvals.append(pval)
+            pair_labels.append(f"{a} vs {b}")
+
+        corrected = multipletests(pvals, method='bonferroni')
+        for i, pair in enumerate(pair_labels):
             results.append({
                 'task_id': task_id,
-                'pair': f"{a} vs {b}",
-                'pval_raw': pval
+                'pair': pair,
+                'pval_raw': pvals[i],
+                'pval_corrected': corrected[1][i],
+                'significant': corrected[0][i]
             })
 
-    df_results = pd.DataFrame(results)
-    corrected = multipletests(df_results['pval_raw'], method='bonferroni')
-    df_results['pval_corrected'] = corrected[1]
-    df_results['significant'] = corrected[0]
-    return df_results
+    return pd.DataFrame(results)
