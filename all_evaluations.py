@@ -127,3 +127,77 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
             })
 
     return pd.DataFrame(results)
+
+
+def plot_bifurcation_by_transform(df: pd.DataFrame, significance: bool = False) -> Optional[pd.DataFrame]:
+    """
+    Plot bifurcation_rel by transform_type as violins for specified tasks,
+    draw a horizontal dotted line at y=5, and optionally test significance.
+    """
+    tasks = ['a_vertebralis_r', 'a_vertebralis_l',
+             'a_carotisexterna_r', 'a_carotisexterna_l']
+    df_sub = df[df['task_id'].isin(tasks)].copy()
+    df_sub['bifurcation_rel'] = pd.to_numeric(
+        df_sub['bifurcation_rel'], errors='coerce')
+    df_sub = df_sub.dropna(subset=['bifurcation_rel'])
+
+    order = ['TransformType.NONE',
+             'TransformType.LINEAR', 'TransformType.NONLINEAR']
+    df_sub['transform_type'] = pd.Categorical(
+        df_sub['transform_type'], categories=order, ordered=True)
+
+    plt.figure(figsize=(8, 6))
+    ax = sns.violinplot(
+        data=df_sub,
+        x='transform_type',
+        y='bifurcation_rel',
+        order=order,
+        scale='width',
+        cut=0
+    )
+
+    plt.xlabel('Transform Type')
+    plt.ylabel('Relative Bifurcation')
+    plt.title('Bifurcation error by Transform Type')
+
+    results = None
+    if significance:
+        results = statistical_significance_bifurcation(df_sub)
+        sig = results[results['significant']]
+        if not sig.empty:
+            pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
+            pvals = sig['pval_corrected'].tolist()
+            annot = Annotator(ax, pairs, data=df_sub,
+                              x='transform_type', y='bifurcation_rel')
+            annot.configure(test=None, text_format='star', line_height=0.2)
+            annot.set_pvalues_and_annotate(pvals)
+
+    ax.axhline(5, linestyle=':', linewidth=1, zorder=10,
+               color='red', label='Threshold = 5mm')
+    plt.tight_layout()
+    plt.show()
+    return results
+
+
+def statistical_significance_bifurcation(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Pairwise t-tests on bifurcation_rel across transform_type with Bonferroni correction.
+    """
+    types = df['transform_type'].cat.categories.tolist()
+    pairs = [(a, b) for i, a in enumerate(types) for b in types[i+1:]]
+    pvals = []
+    labels = []
+    for a, b in pairs:
+        da = df[df['transform_type'] == a]['bifurcation_rel']
+        db = df[df['transform_type'] == b]['bifurcation_rel']
+        _, p = ttest_ind(da, db)
+        pvals.append(p)
+        labels.append(f"{a} vs {b}")
+
+    reject, p_corr, _, _ = multipletests(pvals, method='bonferroni')
+    results = [
+        {'pair': labels[i], 'pval_raw': pvals[i],
+            'pval_corrected': p_corr[i], 'significant': bool(reject[i])}
+        for i in range(len(pvals))
+    ]
+    return pd.DataFrame(results)
