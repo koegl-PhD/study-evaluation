@@ -38,11 +38,16 @@ def main(
             path_rt, 5,
             rad_contents)
 
-        df_rad = df_rad.merge(
+        df_rad: pd.DataFrame = df_rad.merge(
             right=interaction_stats,
             on=["user_id", "patient_id", "transform_type", "task_id", "task_index"],
             how="left"
         )
+
+        # all_evaluations.plot_duration_by_task_and_transform(
+        #     df_rad, 'violin', True)
+        # all_evaluations.plot_bifurcation_by_transform(df_rad, True)
+        all_evaluations.plot_recurrence_accuracy_by_transform(df_rad, True)
 
         df.append(df_rad)
 

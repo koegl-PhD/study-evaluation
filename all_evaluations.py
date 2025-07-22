@@ -1,3 +1,5 @@
+from typing import Optional
+from scipy.stats import chi2_contingency
 import glob
 import json
 import os
@@ -201,3 +203,58 @@ def statistical_significance_bifurcation(df: pd.DataFrame) -> pd.DataFrame:
         for i in range(len(pvals))
     ]
     return pd.DataFrame(results)
+
+
+def plot_recurrence_accuracy_by_transform(df: pd.DataFrame, significance: bool = False) -> Optional[pd.DataFrame]:
+    """
+    Plot recurrence correctness rate by transform_type and optionally annotate pairwise significance.
+    """
+    df_sub = df.dropna(subset=['recurrence']).copy()
+    df_sub['correct'] = df_sub['recurrence'].isin(['tp', 'tn']).astype(int)
+
+    order = ['TransformType.NONE',
+             'TransformType.LINEAR', 'TransformType.NONLINEAR']
+    df_sub['transform_type'] = pd.Categorical(
+        df_sub['transform_type'], categories=order, ordered=True)
+
+    plt.figure(figsize=(8, 6))
+    ax = sns.barplot(data=df_sub, x='transform_type',
+                     y='correct', order=order, ci=95)
+    plt.ylabel('Proportion Correct')
+    plt.xlabel('Transform Type')
+    plt.title('Recurrence Classification Accuracy by Transform Type')
+
+    results: Optional[pd.DataFrame] = None
+    if significance:
+        # pairwise chi-square tests
+        types = order
+        pairs = [(types[i], types[j]) for i in range(len(types))
+                 for j in range(i+1, len(types))]
+        pvals = []
+        labels = []
+        for a, b in pairs:
+            sub = df_sub[df_sub['transform_type'].isin([a, b])]
+            cont = pd.crosstab(sub['transform_type'], sub['correct'])
+            _, p, _, _ = chi2_contingency(cont)
+            pvals.append(p)
+            labels.append(f"{a} vs {b}")
+
+        reject, p_corr, _, _ = multipletests(pvals, method='bonferroni')
+        results = pd.DataFrame([
+            {'pair': labels[i], 'pval_raw': pvals[i],
+                'pval_corrected': p_corr[i], 'significant': bool(reject[i])}
+            for i in range(len(pvals))
+        ])
+
+        sig = results[results['significant']]
+        if not sig.empty:
+            sig_pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
+            sig_pvals = sig['pval_corrected'].tolist()
+            annot = Annotator(ax, sig_pairs, data=df_sub,
+                              x='transform_type', y='correct')
+            annot.configure(test=None, text_format='star', line_height=0.2)
+            annot.set_pvalues_and_annotate(sig_pvals)
+
+    plt.tight_layout()
+    plt.show()
+    return results
