@@ -1,7 +1,7 @@
 import glob
 import json
 
-from typing import Any, Dict, List, LiteralString, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -85,7 +85,7 @@ def get_gt_bifurcation_path(path_gt: str, patient_id: str) -> str:
         f"Patient {patient_id} not found in {path_gt}")
 
 
-def get_gt_lymphnode_path(path_gt: str, patient_id: str) -> str:
+def get_gt_lymphnode_path(path_gt: str, patient_id: str) -> Dict[str, str]:
     categories = glob.glob(path_gt + "/*")
     for category in categories:
         patients = glob.glob(category + "/*")
@@ -96,14 +96,22 @@ def get_gt_lymphnode_path(path_gt: str, patient_id: str) -> str:
 
                 folders_studies = glob.glob(path + "/*")
                 folders_studies.sort()
+
+                study_a = folders_studies[0]
                 study_b = folders_studies[1]
 
-                path_lymphnodes = glob.glob(
+                path_lymphnodes_a = glob.glob(
+                    study_a + "/annotations/roi_lymphnode*.mrk.json")
+                path_lymphnodes_b = glob.glob(
                     study_b + "/annotations/roi_lymphnode*.mrk.json")
-                if len(path_lymphnodes) != 1:
+                if len(path_lymphnodes_b) != 1 or len(path_lymphnodes_a) != 1:
                     raise FileNotFoundError(
-                        f"Expected 1 lymph node file for patient {patient_id}, found {len(path_lymphnodes)}")
-                return path_lymphnodes[0]
+                        f"Expected 1 lymph node file for patient {patient_id}, found {len(path_lymphnodes_a)} in study A and {len(path_lymphnodes_b)} in study B")
+
+                return {
+                    "a": path_lymphnodes_a[0],
+                    "b": path_lymphnodes_b[0]
+                }
 
     raise FileNotFoundError(
         f"Patient {patient_id} not found in {path_gt}")
@@ -234,7 +242,7 @@ def get_gt_lymphnode(path_gt: str, patient_id: str) -> Dict[str, np.ndarray[Any,
     :param patient_id: Patient ID to filter the files.
     :return: Lymph node location as a numpy array.
     """
-    path = get_gt_lymphnode_path(path_gt, patient_id)
+    path = get_gt_lymphnode_path(path_gt, patient_id)['b']
 
     with open(path, 'r') as f:
         data = f.read()
@@ -329,7 +337,35 @@ def insert_lymphnodes(
             df.at[index, 'lymph_node_abs'] = utils.is_point_in_ROI(
                 lymphnode_center_rt, center, size)
 
+    insert_lymphnodes_tre(df)
+
     return df
+
+
+def insert_lymphnodes_tre(
+        df: pd.DataFrame
+) -> pd.DataFrame:
+
+    path_lymph_tres = "tres_lymph_node.csv"
+    df_tres = pd.read_csv(path_lymph_tres)
+
+    df['lymph_node_tre_linear'] = None
+    df['lymph_node_tre_nonlinear'] = None
+
+    for index, row in df.iterrows():
+        task = str(row['task_id'])
+
+        if task == "lymph_node":
+
+            patient_id = row['patient_id']
+            lymph_node_tre = df_tres[df_tres['patient_id'] == patient_id]
+
+            if lymph_node_tre.empty:
+                raise ValueError(
+                    f"No TRE values found for patient {patient_id} in {path_lymph_tres}")
+
+            df.at[index, 'lymph_node_tre_linear'] = lymph_node_tre['tre_lin'].values[0]
+            df.at[index, 'lymph_node_tre_nonlinear'] = lymph_node_tre['tre_def'].values[0]
 
 
 def insert_recurrence(

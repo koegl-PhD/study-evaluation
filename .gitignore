@@ -1,3 +1,8 @@
 __pycache__/*
 *.pyc
-*.csv
+
+descriptive_stats_1.csv
+descriptive_stats_test.csv
+descriptive_stats.csv
+duration.csv
+rad_test.csv
