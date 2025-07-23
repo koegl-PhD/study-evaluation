@@ -1,15 +1,9 @@
+from typing import Literal
+
 import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
 import numpy as np
-from scipy import stats
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from statsmodels.stats.contingency_tables import cochrans_q, mcnemar
-from sklearn.decomposition import PCA
-from sklearn.cluster import KMeans
-from sklearn.metrics import roc_curve, auc
-import pingouin as pg
+import pandas as pd
+import seaborn as sns
 
 
 def descriptive_stats(df: pd.DataFrame) -> pd.DataFrame:
@@ -136,4 +130,52 @@ def plot_lymph_node(df: pd.DataFrame) -> None:
     plt.title('Lymph Node Abs (True/False) per User')
     plt.xticks(rotation=0)
     plt.legend(title='lymph_node_abs')
+    plt.show()
+
+
+def plot_lymph_node_time_and_tre(df: pd.DataFrame, user_id: str, sort_by: Literal['tre', 'duration_seconds']) -> None:
+    """
+    Plot lymph node time and TRE for each user.
+    """
+
+    df_lymph = df[
+        (df['user_id'] == user_id) &
+        (df['task_id'] == 'lymph_node') &
+        (df['transform_type'].isin(
+            ['TransformType.LINEAR', 'TransformType.NONLINEAR']))
+    ].copy()
+
+    # Assign the correct TRE column based on transform_type
+    df_lymph['tre'] = df_lymph.apply(
+        lambda row: row['lymph_node_tre_linear'] if row['transform_type'] == 'TransformType.LINEAR' else row['lymph_node_tre_nonlinear'],
+        axis=1
+    )
+
+    # Drop rows with missing data
+    df_lymph = df_lymph.dropna(subset=['duration_seconds', 'tre'])
+
+    # Sort by duration_seconds from highest to lowest
+    df_lymph = df_lymph.sort_values(
+        sort_by, ascending=False).reset_index(drop=True)
+
+    # Create the plot
+    plt.figure(figsize=(10, 6))
+
+    # Create x-axis positions
+    x_positions = range(len(df_lymph))
+
+    # Plot both TRE and duration on the same y-axis
+    plt.plot(x_positions, df_lymph['tre'], 'o-', color='tab:red',
+             label='TRE (mm)', linewidth=2, markersize=6)
+    plt.plot(x_positions, df_lymph['duration_seconds'], 's-',
+             color='tab:blue', label='Duration (seconds)', linewidth=2, markersize=6)
+
+    # Set labels and title
+    plt.xlabel(f"Cases (sorted by {sort_by}, highest to lowest)")
+    plt.ylabel('Value')
+    plt.title(f'Lymph Node TRE and Duration for User: {user_id}')
+    plt.legend(loc='upper right')
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
     plt.show()
