@@ -44,11 +44,6 @@ def main(
             how="left"
         )
 
-        # all_evaluations.plot_duration_by_task_and_transform(
-        #     df_rad, 'violin', True)
-        # all_evaluations.plot_bifurcation_by_transform(df_rad, True)
-        all_evaluations.plot_recurrence_accuracy_by_transform(df_rad, True)
-
         df.append(df_rad)
 
     df = pd.concat(df, ignore_index=True)
