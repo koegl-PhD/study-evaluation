@@ -203,7 +203,7 @@ def plot_bifurcation_duration_by_transform(
         order=order, density_norm='width', cut=0, ax=ax
     )
     ax.set_xlabel('Transform Type')
-    ax.set_ylabel('Relative Bifurcation')
+    ax.set_ylabel('Duration (seconds)')
     ax.set_title(
         f"Bifurcation duration by Transform Type\n{rad_id} - {'Experienced' if rad_experienced else 'Inexperienced'} - Group {rad_group}")
 
@@ -263,7 +263,7 @@ def plot_bifurcation_error_by_transform(
 
     sns.violinplot(
         data=df_sub, x='transform_type', y=task_result,
-        order=order, density_norm='width', cut=0, ax=ax
+        order=order, density_norm='width', cut=0, ax=ax,
     )
     ax.set_xlabel('Transform Type')
     ax.set_ylabel('Relative Bifurcation')
@@ -315,10 +315,51 @@ def statistical_significance_bifurcation(df: pd.DataFrame, task_result: str) -> 
     return pd.DataFrame(results)
 
 
-def plot_recurrence_accuracy_by_transform(df: pd.DataFrame, significance: bool = False) -> Optional[pd.DataFrame]:
+def plot_all_recurrence_by_transform(
+    df: pd.DataFrame,
+    significance: bool,
+    value: Literal['accuracy', 'duration']
+) -> None:
+
+    participants = json.load(open('participants.json', 'r'))
+    l = len(participants)
+
+    _, axes = plt.subplots(1, l, figsize=(l*6, 6), sharey=True)
+    for i, rad_id in enumerate(participants.keys()):
+        if value == 'accuracy':
+            plot_recurrence_accuracy_by_transform(
+                df,
+                participants,
+                rad_id,
+                significance,
+                ax=axes[i]
+            )
+        elif value == 'duration':
+            plot_recurrence_duration_by_transform(
+                df,
+                participants,
+                rad_id,
+                significance,
+                ax=axes[i]
+            )
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_recurrence_accuracy_by_transform(
+    df: pd.DataFrame,
+    participants: Dict[str, Dict[str, int | bool | str]],
+    rad_id: str,
+    significance: bool = False,
+    ax: Optional[plt.Axes] = None
+) -> Optional[pd.DataFrame]:
     """
     Plot recurrence correctness rate by transform_type and optionally annotate pairwise significance.
     """
+
+    df = df[df["user_id"] == rad_id].copy()
+
     df_sub = df.dropna(subset=['recurrence']).copy()
     df_sub['correct'] = df_sub['recurrence'].isin(['tp', 'tn']).astype(int)
 
@@ -327,12 +368,17 @@ def plot_recurrence_accuracy_by_transform(df: pd.DataFrame, significance: bool =
     df_sub['transform_type'] = pd.Categorical(
         df_sub['transform_type'], categories=order, ordered=True)
 
-    plt.figure(figsize=(8, 6))
-    ax = sns.barplot(data=df_sub, x='transform_type',
-                     y='correct', order=order, ci=95)
-    plt.ylabel('Proportion Correct')
-    plt.xlabel('Transform Type')
-    plt.title('Recurrence Classification Accuracy by Transform Type')
+    created_fig = False
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 6))
+        created_fig = True
+
+    sns.barplot(data=df_sub, x='transform_type',
+                y='correct', order=order, errorbar=('ci', 95), ax=ax)
+    ax.set_ylabel('Proportion Correct')
+    ax.set_xlabel('Transform Type')
+    ax.set_title(
+        f"Recurrence Classification Accuracy by Transform Type\n{rad_id} - {'Experienced' if participants[rad_id]['experienced'] else 'Inexperienced'} - Group {participants[rad_id]['group']}")
 
     results: Optional[pd.DataFrame] = None
     if significance:
@@ -361,10 +407,70 @@ def plot_recurrence_accuracy_by_transform(df: pd.DataFrame, significance: bool =
             sig_pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
             sig_pvals = sig['pval_corrected'].tolist()
             annot = Annotator(ax, sig_pairs, data=df_sub,
-                              x='transform_type', y='correct')
+                              x='transform_type', y='correct', verbose=False)
             annot.configure(test=None, text_format='star', line_height=0.2)
             annot.set_pvalues_and_annotate(sig_pvals)
 
-    plt.tight_layout()
-    plt.show()
-    return results
+    if created_fig:
+        plt.tight_layout()
+
+    return ax, results
+
+
+def plot_recurrence_duration_by_transform(
+    df: pd.DataFrame,
+    participants: Dict[str, Dict[str, int | bool | str]],
+    rad_id: str,
+    significance: bool = False,
+    ax: Optional[plt.Axes] = None
+) -> Tuple[plt.Axes, pd.DataFrame]:
+    """
+    Return (ax, results) for a violin plot of bifurcation_rel by transform_type; adds significance stars if requested.
+    """
+
+    df_rad = df[df["user_id"] == rad_id].copy()
+
+    rad_group = participants[rad_id]['group']
+    rad_experienced = participants[rad_id]['experienced']
+
+    df_sub = df_rad[df_rad['task_id'] == "recurrence"].copy()
+    df_sub['duration_seconds'] = pd.to_numeric(
+        df_sub['duration_seconds'], errors='coerce')
+    df_sub = df_sub.dropna(subset=['duration_seconds'])
+
+    order = ['TransformType.NONE',
+             'TransformType.LINEAR', 'TransformType.NONLINEAR']
+    df_sub['transform_type'] = pd.Categorical(
+        df_sub['transform_type'], categories=order, ordered=True)
+
+    created_fig = False
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 6))
+        created_fig = True
+
+    sns.violinplot(
+        data=df_sub, x='transform_type', y='duration_seconds',
+        order=order, density_norm='width', cut=0, ax=ax
+    )
+    ax.set_xlabel('Transform Type')
+    ax.set_ylabel('Duration (seconds)')
+    ax.set_title(
+        f"Recurrence duration by Transform Type\n{rad_id} - {'Experienced' if rad_experienced else 'Inexperienced'} - Group {rad_group}")
+
+    results = None
+    if significance:
+        results = statistical_significance_bifurcation(
+            df_sub, "duration_seconds")
+        sig = results[results['significant']]
+        if not sig.empty:
+            pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
+            pvals = sig['pval_corrected'].tolist()
+            annot = Annotator(ax, pairs, data=df_sub,
+                              x='transform_type', y='duration_seconds', verbose=False)
+            annot.configure(test=None, text_format='star', line_height=0.2)
+            annot.set_pvalues_and_annotate(pvals)
+
+    if created_fig:
+        plt.tight_layout()
+
+    return ax, results
