@@ -311,7 +311,36 @@ def insert_bifurcations(
                 df.at[index, name_rel] = norm
                 df.at[index, name_abs] = norm < tolerance
 
+    df = insert_bifurcations_tres(df)
+
     return df
+
+
+def insert_bifurcations_tres(
+    df: pd.DataFrame
+) -> pd.DataFrame:
+    """Insert per-transform TRE into results: match on (patient_id, task_id, transform_type); others stay NaN."""
+
+    tres_linear = pd.read_csv("tres_linear_deformable.csv")
+
+    tres_long = tres_linear.melt(
+        id_vars=["patient_id", "task_id"],
+        value_vars=["tre_none", "tre_linear", "tre_nonlinear"],
+        var_name="tre_kind",
+        value_name="bifurcation_tre",
+    )
+    kind_to_tt = {
+        "tre_none": "TransformType.NONE",
+        "tre_linear": "TransformType.LINEAR",
+        "tre_nonlinear": "TransformType.NONLINEAR",
+    }
+    tres_long["transform_type"] = tres_long["tre_kind"].map(kind_to_tt)
+    return df.merge(
+        tres_long[["patient_id", "task_id",
+                   "transform_type", "bifurcation_tre"]],
+        on=["patient_id", "task_id", "transform_type"],
+        how="left",
+    )
 
 
 def insert_lymphnodes(
@@ -345,7 +374,7 @@ def insert_lymphnodes(
             df.at[index, 'lymph_node_abs'] = utils.is_point_in_ROI(
                 lymphnode_center_rt, center, size)
 
-    insert_lymphnodes_tre(df)
+    df = insert_lymphnodes_tre(df)
 
     return df
 
@@ -357,23 +386,26 @@ def insert_lymphnodes_tre(
     path_lymph_tres = "tres_lymph_node.csv"
     df_tres = pd.read_csv(path_lymph_tres)
 
-    df['lymph_node_tre_linear'] = None
-    df['lymph_node_tre_nonlinear'] = None
+    tres_long = df_tres.melt(
+        id_vars=["patient_id", "task_id"],
+        value_vars=["tre_none", "tre_linear", "tre_nonlinear"],
+        var_name="tre_kind",
+        value_name="lymph_node_tre",
+    )
+    kind_to_tt = {
+        "tre_none": "TransformType.NONE",
+        "tre_linear": "TransformType.LINEAR",
+        "tre_nonlinear": "TransformType.NONLINEAR",
+    }
 
-    for index, row in df.iterrows():
-        task = str(row['task_id'])
+    tres_long["transform_type"] = tres_long["tre_kind"].map(kind_to_tt)
 
-        if task == "lymph_node":
-
-            patient_id = row['patient_id']
-            lymph_node_tre = df_tres[df_tres['patient_id'] == patient_id]
-
-            if lymph_node_tre.empty:
-                raise ValueError(
-                    f"No TRE values found for patient {patient_id} in {path_lymph_tres}")
-
-            df.at[index, 'lymph_node_tre_linear'] = lymph_node_tre['tre_lin'].values[0]
-            df.at[index, 'lymph_node_tre_nonlinear'] = lymph_node_tre['tre_def'].values[0]
+    return df.merge(
+        tres_long[["patient_id", "task_id",
+                   "transform_type", "lymph_node_tre"]],
+        on=["patient_id", "task_id", "transform_type"],
+        how="left",
+    )
 
 
 def insert_recurrence(
@@ -436,3 +468,6 @@ def insert_study_results(
               value=rad_contents['experienced'])
 
     return df
+
+
+### TREs ###

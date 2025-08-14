@@ -30,6 +30,25 @@ def main():
         }
     }
 
+
+
+    # get df where "calibration" is not in patient_id
+    df = df[~df['patient_id'].str.contains('calibration')].reset_index(drop=True)
+
+    # where (user_id == 'rad_1' and transform_type == TransformType.NONLINEAR) or (user_id == 'rad_3' and transform_type == TransformType.NONE)
+    df = df[(df['user_id'] == 'rad_1') & (df['transform_type'] == 'TransformType.NONLINEAR') |
+            (df['user_id'] == 'rad_3') & (df['transform_type'] == 'TransformType.NONE')].reset_index(drop=True)
+    
+    # where task is neither lymph_node or recurrence
+    df = df[~df['task_id'].isin(['lymph_node', 'recurrence'])].reset_index(drop=True)
+    
+    df.to_csv('filtered_results.csv', index=False)
+
+    # average duration_seconds by user_id and task_id 
+    avg_duration = df.groupby(['user_id', 'task_id', 'transform_type'])['duration_seconds'].mean().reset_index()
+
+    x = 0
+
     # print(f"Loaded results.csv: {len(df)} rows, {len(df.columns)} columns.")
 
     # # List all available analysis functions
