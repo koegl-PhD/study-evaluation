@@ -131,36 +131,48 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
-def plot_bifurcation_by_transform(df: pd.DataFrame, significance: bool = False) -> Optional[pd.DataFrame]:
+def plot_bifurcation_duration_by_transform(
+    df: pd.DataFrame,
+    participants: Dict[str, Dict[str, int | bool | str]],
+    rad_id: str,
+    significance: bool = False,
+    ax: Optional[plt.Axes] = None
+) -> Tuple[plt.Axes, pd.DataFrame]:
     """
-    Plot bifurcation_rel by transform_type as violins for specified tasks,
-    draw a horizontal dotted line at y=5, and optionally test significance.
+    Return (ax, results) for a violin plot of bifurcation_rel by transform_type; adds significance stars if requested.
     """
+
     tasks = ['a_vertebralis_r', 'a_vertebralis_l',
              'a_carotisexterna_r', 'a_carotisexterna_l']
-    df_sub = df[df['task_id'].isin(tasks)].copy()
-    df_sub['bifurcation_rel'] = pd.to_numeric(
-        df_sub['bifurcation_rel'], errors='coerce')
-    df_sub = df_sub.dropna(subset=['bifurcation_rel'])
+
+    df_rad = df[df["user_id"] == rad_id].copy()
+
+    rad_group = participants[rad_id]['group']
+    rad_experienced = participants[rad_id]['experienced']
+
+    df_sub = df_rad[df_rad['task_id'].isin(tasks)].copy()
+    df_sub['duration_seconds'] = pd.to_numeric(
+        df_sub['duration_seconds'], errors='coerce')
+    df_sub = df_sub.dropna(subset=['duration_seconds'])
 
     order = ['TransformType.NONE',
              'TransformType.LINEAR', 'TransformType.NONLINEAR']
     df_sub['transform_type'] = pd.Categorical(
         df_sub['transform_type'], categories=order, ordered=True)
 
-    plt.figure(figsize=(8, 6))
-    ax = sns.violinplot(
-        data=df_sub,
-        x='transform_type',
-        y='bifurcation_rel',
-        order=order,
-        scale='width',
-        cut=0
-    )
+    created_fig = False
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 6))
+        created_fig = True
 
-    plt.xlabel('Transform Type')
-    plt.ylabel('Relative Bifurcation')
-    plt.title('Bifurcation error by Transform Type')
+    sns.violinplot(
+        data=df_sub, x='transform_type', y='duration_seconds',
+        order=order, density_norm='width', cut=0, ax=ax
+    )
+    ax.set_xlabel('Transform Type')
+    ax.set_ylabel('Relative Bifurcation')
+    ax.set_title(
+        f"Bifurcation duration by Transform Type\n{rad_id} - {'Experienced' if rad_experienced else 'Inexperienced'} - Group {rad_group}")
 
     results = None
     if significance:
@@ -170,15 +182,78 @@ def plot_bifurcation_by_transform(df: pd.DataFrame, significance: bool = False) 
             pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
             pvals = sig['pval_corrected'].tolist()
             annot = Annotator(ax, pairs, data=df_sub,
-                              x='transform_type', y='bifurcation_rel')
+                              x='transform_type', y='duration_seconds', verbose=False)
+            annot.configure(test=None, text_format='star', line_height=0.2)
+            annot.set_pvalues_and_annotate(pvals)
+
+    if created_fig:
+        plt.tight_layout()
+
+    return ax, results
+
+
+def plot_bifurcation_error_by_transform(
+    df: pd.DataFrame,
+    participants: Dict[str, Dict[str, int | bool | str]],
+    rad_id: str,
+    significance: bool = False,
+    ax: Optional[plt.Axes] = None
+) -> Tuple[plt.Axes, pd.DataFrame]:
+    """
+    Return (ax, results) for a violin plot of bifurcation_rel by transform_type; adds significance stars if requested.
+    """
+
+    tasks = ['a_vertebralis_r', 'a_vertebralis_l',
+             'a_carotisexterna_r', 'a_carotisexterna_l']
+
+    df_rad = df[df["user_id"] == rad_id].copy()
+
+    rad_group = participants[rad_id]['group']
+    rad_experienced = participants[rad_id]['experienced']
+
+    df_sub = df_rad[df_rad['task_id'].isin(tasks)].copy()
+    df_sub['bifurcation_rel'] = pd.to_numeric(
+        df_sub['bifurcation_rel'], errors='coerce')
+    df_sub = df_sub.dropna(subset=['bifurcation_rel'])
+
+    order = ['TransformType.NONE',
+             'TransformType.LINEAR', 'TransformType.NONLINEAR']
+    df_sub['transform_type'] = pd.Categorical(
+        df_sub['transform_type'], categories=order, ordered=True)
+
+    created_fig = False
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 6))
+        created_fig = True
+
+    sns.violinplot(
+        data=df_sub, x='transform_type', y='bifurcation_rel',
+        order=order, density_norm='width', cut=0, ax=ax
+    )
+    ax.set_xlabel('Transform Type')
+    ax.set_ylabel('Relative Bifurcation')
+    ax.set_title(
+        f"Bifurcation error by Transform Type\n{rad_id} - {'Experienced' if rad_experienced else 'Inexperienced'} - Group {rad_group}")
+
+    results = None
+    if significance:
+        results = statistical_significance_bifurcation(df_sub)
+        sig = results[results['significant']]
+        if not sig.empty:
+            pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
+            pvals = sig['pval_corrected'].tolist()
+            annot = Annotator(ax, pairs, data=df_sub,
+                              x='transform_type', y='bifurcation_rel', verbose=False)
             annot.configure(test=None, text_format='star', line_height=0.2)
             annot.set_pvalues_and_annotate(pvals)
 
     ax.axhline(5, linestyle=':', linewidth=1, zorder=10,
                color='red', label='Threshold = 5mm')
-    plt.tight_layout()
-    plt.show()
-    return results
+
+    if created_fig:
+        plt.tight_layout()
+
+    return ax, results
 
 
 def statistical_significance_bifurcation(df: pd.DataFrame) -> pd.DataFrame:

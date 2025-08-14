@@ -165,10 +165,13 @@ def plot_lymph_node_time_and_tre(df: pd.DataFrame, user_id: str, sort_by: Litera
     x_positions = range(len(df_lymph))
 
     # Plot both TRE and duration on the same y-axis
-    plt.plot(x_positions, df_lymph['tre'], 'o-', color='tab:red',
+    plt.plot(x_positions, df_lymph['tre'], 'o-', color='tab:green',
              label='TRE (mm)', linewidth=2, markersize=6)
     plt.plot(x_positions, df_lymph['duration_seconds'], 's-',
              color='tab:blue', label='Duration (seconds)', linewidth=2, markersize=6)
+
+    # draw hroizontal red dotted line at y=5
+    plt.axhline(y=5, color='red', linestyle='--', label='Threshold = 5mm')
 
     # Set labels and title
     plt.xlabel(f"Cases (sorted by {sort_by}, highest to lowest)")
@@ -179,3 +182,49 @@ def plot_lymph_node_time_and_tre(df: pd.DataFrame, user_id: str, sort_by: Litera
 
     plt.tight_layout()
     plt.show()
+
+
+def extract_questionnaire_data(path_questionnaire: str, part: Literal["general", "registration"]) -> pd.DataFrame:
+    """
+    Extracts questionnaire data from a CSV file and returns it as a DataFrame.
+    """
+    df = pd.read_csv(path_questionnaire)
+
+    if part == "general":
+        questions_df = df.iloc[:, 4:8]
+    elif part == "registration":
+        questions_df = df.iloc[:, 8:]
+    else:
+        raise ValueError("part must be either 'general' or 'registration'")
+
+    response_order = [
+        "Strongly disagree",
+        "Disagree",
+        "Neither agree nor disagree",
+        "Agree",
+        "Strongly agree"
+    ]
+    # Define German to English mapping
+    response_map = {
+        "Stimme überhaupt nicht zu": "Strongly disagree",
+        "Stimme nicht zu": "Disagree",
+        "Neutral": "Neither agree nor disagree",
+        "Stimme zu": "Agree",
+        "Stimme voll und ganz zu": "Strongly agree"
+    }
+
+    # Apply the mapping
+    mapped_df = questions_df.applymap(lambda x: response_map.get(x, x))
+
+    # Recalculate counts
+    counts_mapped = pd.DataFrame(index=response_order)
+
+    for col in mapped_df.columns:
+        col_counts = mapped_df[col].value_counts().reindex(
+            response_order, fill_value=0)
+        counts_mapped[col] = col_counts
+
+    # Transpose for plotting or LaTeX export
+    counts_mapped = counts_mapped.T
+
+    x = 0
