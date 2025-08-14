@@ -31,6 +31,18 @@ def main():
     # print(all_evaluations.plot_duration_by_task_and_transform(
     #     df_rad_test, 'violin', significance=True))
 
+    all_evaluations.plot_duration_by_task_and_transform(
+        df[df["user_id"] == "rad_2"], 'violin', significance=True)
+    all_evaluations.plot_bifurcation_error_by_transform(
+        df[df["user_id"] == "rad_2"], significance=True)
+    all_evaluations.plot_recurrence_accuracy_by_transform(
+        df[df["user_id"] == "rad_2"], significance=True)
+    af.extract_questionnaire_data(
+        '/home/fryderyk/Downloads/Questionnaire Registration Evaluation (Responses) - Form Responses 1(1).csv', part='general')
+
+    vals = af.get_recurrence_vals(df, rad_id='rad_2')
+    af.plot_recurrence_vals(vals)
+
     recurrence_test = af.get_recurrence_vals(df, rad_id='rad_test')
     recurrence_rad_1 = af.get_recurrence_vals(df, rad_id='rad_1')
     df_summary = af.get_recurrence_vals(df)
