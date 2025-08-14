@@ -284,24 +284,32 @@ def insert_bifurcations(
         tolerance: float
 ) -> pd.DataFrame:
 
-    name_abs = f"bifurcation_abs_{tolerance}"
+    task_ids = [
+        'a_vertebralis_r',
+        'a_vertebralis_l',
+        'a_carotisexterna_r',
+        'a_carotisexterna_l'
+    ]
 
-    df[name_abs] = None
-    df['bifurcation_rel'] = None
+    for task_id in task_ids:
+        name_rel = f"{task_id}_rel"
+        name_abs = f"{task_id}_abs_{tolerance}"
 
-    for index, row in df.iterrows():
+        df[name_rel] = None
+        df[name_abs] = None
 
-        t = str(row['task_id'])
+        for index, row in df.iterrows():
 
-        if row['task_id'] in ['a_vertebralis_r', 'a_vertebralis_l', 'a_carotisexterna_r', 'a_carotisexterna_l']:
-            points_rt = get_rt_bifurcation_locations(
-                path_rt, row['patient_id'])
-            points_gt = get_gt_bifurcation_locations(
-                path_gt, row['patient_id'])
+            if row['task_id'] == task_id:
 
-            norm = np.linalg.norm(points_gt[t] - points_rt[t])
-            df.at[index, 'bifurcation_rel'] = norm
-            df.at[index, name_abs] = norm < tolerance
+                points_rt = get_rt_bifurcation_locations(
+                    path_rt, row['patient_id'])
+                points_gt = get_gt_bifurcation_locations(
+                    path_gt, row['patient_id'])
+
+                norm = np.linalg.norm(points_gt[task_id] - points_rt[task_id])
+                df.at[index, name_rel] = norm
+                df.at[index, name_abs] = norm < tolerance
 
     return df
 
