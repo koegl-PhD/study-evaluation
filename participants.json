@@ -1,0 +1,20 @@
+{
+    "rad_1": {
+        "group": 1,
+        "experienced": false,
+        "path_rt": "/data/registrationEvaluation/gt_and_rt/study_results/rad_1",
+        "path_log": "/data/registrationEvaluation/gt_and_rt/study_results/rad_1/rad_1.log"
+    },
+    "rad_2": {
+        "group": 1,
+        "experienced": true,
+        "path_rt": "/data/registrationEvaluation/gt_and_rt/study_results/rad_2",
+        "path_log": "/data/registrationEvaluation/gt_and_rt/study_results/rad_2/rad_2.log"
+    },
+    "rad_3": {
+        "group": 2,
+        "experienced": false,
+        "path_rt": "/data/registrationEvaluation/gt_and_rt/study_results/rad_3",
+        "path_log": "/data/registrationEvaluation/gt_and_rt/study_results/rad_3/rad_3.log"
+    }
+}
