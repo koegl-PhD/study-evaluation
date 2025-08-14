@@ -285,10 +285,10 @@ def insert_bifurcations(
 ) -> pd.DataFrame:
 
     task_ids = [
-        'a_vertebralis_r',
-        'a_vertebralis_l',
-        'a_carotisexterna_r',
-        'a_carotisexterna_l'
+        "a_vertebralis_r",
+        "a_vertebralis_l",
+        "a_carotisexterna_r",
+        "a_carotisexterna_l"
     ]
 
     for task_id in task_ids:

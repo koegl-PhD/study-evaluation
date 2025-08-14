@@ -1,21 +1,13 @@
-from typing import Optional
-from scipy.stats import chi2_contingency
-import glob
 import json
-import os
 
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind, chi2_contingency
 import seaborn as sns
 from statannotations.Annotator import Annotator
 from statsmodels.stats.multitest import multipletests
-
-
-import log_parsing
 
 
 # mean durations
@@ -131,10 +123,54 @@ def statistical_significance_duration(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
+def plot_all_bifurcation_by_transform(
+    df: pd.DataFrame,
+    significance: bool,
+    value: Literal['error', 'duration']
+) -> None:
+
+    participants = json.load(open('participants.json', 'r'))
+
+    task_ids = [
+        "a_vertebralis_r",
+        "a_vertebralis_l",
+        "a_carotisexterna_r",
+        "a_carotisexterna_l"
+    ]
+
+    _, axes = plt.subplots(4, len(participants), figsize=(18, 20), sharey=True)
+
+    for rad_id in participants.keys():
+        for i, task_id in enumerate(task_ids):
+
+            if value == 'error':
+                plot_bifurcation_error_by_transform(
+                    df,
+                    participants,
+                    rad_id,
+                    task_id,
+                    significance,
+                    ax=axes[i, list(participants.keys()).index(rad_id)]
+                )
+            elif value == 'duration':
+                plot_bifurcation_duration_by_transform(
+                    df,
+                    participants,
+                    rad_id,
+                    task_id,
+                    significance,
+                    ax=axes[i, list(participants.keys()).index(rad_id)]
+                )
+
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_bifurcation_duration_by_transform(
     df: pd.DataFrame,
     participants: Dict[str, Dict[str, int | bool | str]],
     rad_id: str,
+    task_id: str,
     significance: bool = False,
     ax: Optional[plt.Axes] = None
 ) -> Tuple[plt.Axes, pd.DataFrame]:
@@ -142,15 +178,12 @@ def plot_bifurcation_duration_by_transform(
     Return (ax, results) for a violin plot of bifurcation_rel by transform_type; adds significance stars if requested.
     """
 
-    tasks = ['a_vertebralis_r', 'a_vertebralis_l',
-             'a_carotisexterna_r', 'a_carotisexterna_l']
-
     df_rad = df[df["user_id"] == rad_id].copy()
 
     rad_group = participants[rad_id]['group']
     rad_experienced = participants[rad_id]['experienced']
 
-    df_sub = df_rad[df_rad['task_id'].isin(tasks)].copy()
+    df_sub = df_rad[df_rad['task_id'] == task_id].copy()
     df_sub['duration_seconds'] = pd.to_numeric(
         df_sub['duration_seconds'], errors='coerce')
     df_sub = df_sub.dropna(subset=['duration_seconds'])
@@ -176,7 +209,8 @@ def plot_bifurcation_duration_by_transform(
 
     results = None
     if significance:
-        results = statistical_significance_bifurcation(df_sub)
+        results = statistical_significance_bifurcation(
+            df_sub, "duration_seconds")
         sig = results[results['significant']]
         if not sig.empty:
             pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
@@ -196,6 +230,7 @@ def plot_bifurcation_error_by_transform(
     df: pd.DataFrame,
     participants: Dict[str, Dict[str, int | bool | str]],
     rad_id: str,
+    task_id: str,
     significance: bool = False,
     ax: Optional[plt.Axes] = None
 ) -> Tuple[plt.Axes, pd.DataFrame]:
@@ -203,18 +238,18 @@ def plot_bifurcation_error_by_transform(
     Return (ax, results) for a violin plot of bifurcation_rel by transform_type; adds significance stars if requested.
     """
 
-    tasks = ['a_vertebralis_r', 'a_vertebralis_l',
-             'a_carotisexterna_r', 'a_carotisexterna_l']
+    task_result = task_id + '_rel'
+    task_id = task_id
 
     df_rad = df[df["user_id"] == rad_id].copy()
 
     rad_group = participants[rad_id]['group']
     rad_experienced = participants[rad_id]['experienced']
 
-    df_sub = df_rad[df_rad['task_id'].isin(tasks)].copy()
-    df_sub['bifurcation_rel'] = pd.to_numeric(
-        df_sub['bifurcation_rel'], errors='coerce')
-    df_sub = df_sub.dropna(subset=['bifurcation_rel'])
+    df_sub = df_rad[df_rad['task_id'] == task_id].copy()
+    df_sub[task_result] = pd.to_numeric(
+        df_sub[task_result], errors='coerce')
+    df_sub = df_sub.dropna(subset=[task_result])
 
     order = ['TransformType.NONE',
              'TransformType.LINEAR', 'TransformType.NONLINEAR']
@@ -227,23 +262,23 @@ def plot_bifurcation_error_by_transform(
         created_fig = True
 
     sns.violinplot(
-        data=df_sub, x='transform_type', y='bifurcation_rel',
+        data=df_sub, x='transform_type', y=task_result,
         order=order, density_norm='width', cut=0, ax=ax
     )
     ax.set_xlabel('Transform Type')
     ax.set_ylabel('Relative Bifurcation')
     ax.set_title(
-        f"Bifurcation error by Transform Type\n{rad_id} - {'Experienced' if rad_experienced else 'Inexperienced'} - Group {rad_group}")
+        f"{task_id} error by Transform Type\n{rad_id} - {'Experienced' if rad_experienced else 'Inexperienced'} - Group {rad_group}")
 
     results = None
     if significance:
-        results = statistical_significance_bifurcation(df_sub)
+        results = statistical_significance_bifurcation(df_sub, task_result)
         sig = results[results['significant']]
         if not sig.empty:
             pairs = [tuple(p.split(' vs ')) for p in sig['pair']]
             pvals = sig['pval_corrected'].tolist()
             annot = Annotator(ax, pairs, data=df_sub,
-                              x='transform_type', y='bifurcation_rel', verbose=False)
+                              x='transform_type', y=task_result, verbose=False)
             annot.configure(test=None, text_format='star', line_height=0.2)
             annot.set_pvalues_and_annotate(pvals)
 
@@ -256,7 +291,7 @@ def plot_bifurcation_error_by_transform(
     return ax, results
 
 
-def statistical_significance_bifurcation(df: pd.DataFrame) -> pd.DataFrame:
+def statistical_significance_bifurcation(df: pd.DataFrame, task_result: str) -> pd.DataFrame:
     """
     Pairwise t-tests on bifurcation_rel across transform_type with Bonferroni correction.
     """
@@ -265,8 +300,8 @@ def statistical_significance_bifurcation(df: pd.DataFrame) -> pd.DataFrame:
     pvals = []
     labels = []
     for a, b in pairs:
-        da = df[df['transform_type'] == a]['bifurcation_rel']
-        db = df[df['transform_type'] == b]['bifurcation_rel']
+        da = df[df['transform_type'] == a][task_result]
+        db = df[df['transform_type'] == b][task_result]
         _, p = ttest_ind(da, db)
         pvals.append(p)
         labels.append(f"{a} vs {b}")

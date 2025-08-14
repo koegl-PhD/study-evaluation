@@ -1,3 +1,5 @@
+import json
+
 from typing import Dict
 
 import matplotlib.pyplot as plt
@@ -49,6 +51,8 @@ def main(
     df = pd.concat(df, ignore_index=True)
 
     df.to_csv('results.csv', index=False)
+
+    json.dump(participants, open('participants.json', 'w'), indent=4)
 
     x = 0
 

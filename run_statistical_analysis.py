@@ -1,15 +1,35 @@
-#!/usr/bin/env python3
-
+import matplotlib.pyplot as plt
 import pandas as pd
-import inspect
-# assumes your functions are saved in analysis_functions.py
-import analysis_functions as af
+
+from typing import Dict
+
 import all_evaluations
+import analysis_functions as af
 
 
 def main():
     # Load the results
     df = pd.read_csv('results.csv')
+
+    participants: Dict[str, Dict[str, int | bool | str]] = {
+        "rad_test": {
+            "group": 1,
+            "experienced": False,
+        },
+        "rad_1": {
+            "group": 1,
+            "experienced": False,
+        },
+        "rad_2": {
+            "group": 1,
+            "experienced": True,
+        },
+        "rad_3": {
+            "group": 2,
+            "experienced": False,
+        }
+    }
+
     # print(f"Loaded results.csv: {len(df)} rows, {len(df.columns)} columns.")
 
     # # List all available analysis functions
@@ -31,10 +51,14 @@ def main():
     # print(all_evaluations.plot_duration_by_task_and_transform(
     #     df_rad_test, 'violin', significance=True))
 
-    all_evaluations.plot_duration_by_task_and_transform(
-        df[df["user_id"] == "rad_2"], 'violin', significance=True)
-    all_evaluations.plot_bifurcation_error_by_transform(
-        df[df["user_id"] == "rad_2"], significance=True)
+    # all_evaluations.plot_duration_by_task_and_transform(
+    #     df[df["user_id"] == "rad_2"], 'violin', significance=True)
+
+    all_evaluations.plot_all_bifurcation_by_transform(
+        df, significance=True, value='error')
+    all_evaluations.plot_all_bifurcation_by_transform(
+        df, significance=True, value='duration')
+
     all_evaluations.plot_recurrence_accuracy_by_transform(
         df[df["user_id"] == "rad_2"], significance=True)
     af.extract_questionnaire_data(
