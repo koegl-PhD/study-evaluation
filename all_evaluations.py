@@ -474,3 +474,147 @@ def plot_recurrence_duration_by_transform(
         plt.tight_layout()
 
     return ax, results
+
+
+def plot_all_bifurcation_by_transforma_cross_groups(
+    df: pd.DataFrame,
+    significance: bool,
+    value: Literal['error', 'duration']
+) -> None:
+
+    # exclude calibration data
+    df = df[~df['patient_id'].str.contains(
+        'calibration')].reset_index(drop=True)
+
+    keep = [
+        (('rad_1', 'TransformType.NONLINEAR'), ('rad_3', 'TransformType.NONE')),
+        (('rad_1', 'TransformType.LINEAR'), ('rad_3', 'TransformType.NONLINEAR')),
+        (('rad_1', 'TransformType.NONE'), ('rad_3', 'TransformType.LINEAR'))
+    ]
+
+    participants = json.load(open('participants.json', 'r'))
+    l = len(keep)
+
+    _, axes = plt.subplots(1, l, figsize=(l*6, 6), sharey=True)
+
+    # make title fo entire plot
+    plt.suptitle(
+        "Task Duration by Task and Transform Type between rad_1 and rad_3")
+    # .groupby(['user_id', 'task_id'])['duration_seconds'].mean().reset_index()
+    for i, current in enumerate(keep):
+        # for now only rad_1 and rad_2 for
+        df_keep = df[(df['user_id'] == current[0][0]) & (df['transform_type'] == current[0][1]) |
+                     (df['user_id'] == current[1][0]) & (df['transform_type'] == current[1][1])].reset_index(drop=True).copy()
+
+        # keep bifurcations
+        df_bifurcations = df_keep[~df_keep['task_id'].isin(
+            ['lymph_node', 'recurrence'])].reset_index(drop=True).copy()
+
+        plot_bifurcation_by_transform_across_groups(
+            df_bifurcations.copy(),
+            current,
+            significance,
+            axes[i],
+        )
+
+
+def statistical_significance_between_tasks(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
+    """Pairwise t-tests between tasks within each transform_type with Bonferroni correction.
+
+    Returns a DataFrame with columns: transform_type, pair (taskA vs taskB), pval_raw, pval_corrected, significant.
+    """
+    results: list[dict] = []
+    for transform in df['transform_type'].dropna().unique():
+        sub = df[df['transform_type'] == transform]
+        tasks = sub['task_id'].dropna().unique().tolist()
+        tasks.sort()
+        pairs = [(a, b) for i, a in enumerate(tasks) for b in tasks[i+1:]]
+        if not pairs:
+            continue
+        pvals: list[float] = []
+        labels: list[str] = []
+        for a, b in pairs:
+            da = sub[sub['task_id'] == a][value_col]
+            db = sub[sub['task_id'] == b][value_col]
+            # Skip if one of the groups is empty
+            if da.empty or db.empty:
+                continue
+            _, p = ttest_ind(da, db, equal_var=False)
+            pvals.append(p)
+            labels.append(f"{a} vs {b}")
+        if not pvals:
+            continue
+        reject, p_corr, _, _ = multipletests(pvals, method='bonferroni')
+        for i in range(len(pvals)):
+            results.append({
+                'transform_type': transform,
+                'pair': labels[i],
+                'pval_raw': pvals[i],
+                'pval_corrected': p_corr[i],
+                'significant': bool(reject[i])
+            })
+    return pd.DataFrame(results)
+
+
+def plot_bifurcation_by_transform_across_groups(
+    df: pd.DataFrame,
+    current: Tuple[Tuple[str, str], Tuple[str, str]],
+    significance: bool = False,
+    ax: Optional[plt.Axes] = None
+) -> None:
+    """Plot task duration (seconds) by task for NONE vs NONLINEAR and optionally add per-task significance.
+
+    When significance=True, performs (up to) 4 t-tests: for each task compares TransformType.NONE vs TransformType.NONLINEAR (Bonferroni corrected within each task via existing helper) and annotates stars.
+    """
+    plot_df = df[df['transform_type'].isin(
+        [current[0][1], current[1][1]])].copy()
+
+    created_fig = False
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 6))
+        created_fig = True
+
+    # Ensure only bifurcation tasks (exclude other tasks if present)
+    # (Assumes bifurcation tasks contain 'carotis' or 'vertebralis'; adjust if needed)
+    # If you have an explicit list, you can filter before calling this function instead.
+
+    sns.boxplot(data=plot_df, x="task_id",
+                y="duration_seconds", hue="transform_type", ax=ax)
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+
+    if significance and not plot_df.empty:
+        transform_order = [current[0][1], current[1][1]]
+        plot_df['transform_type'] = pd.Categorical(
+            plot_df['transform_type'], categories=transform_order, ordered=True)
+        # Use existing function to compute per-task pairwise tests (will just have one pair here)
+        test_results = statistical_significance_duration(plot_df)
+        pairs = []
+        pvalues = []
+        for _, row in test_results.iterrows():
+            if not row['significant']:
+                continue
+            a, b = row['pair'].split(' vs ')
+            # We only want NONE vs NONLINEAR (ignore any other if present)
+            if set([a, b]) != set(transform_order):
+                continue
+            t_id = row['task_id']
+            # order pair consistently
+            if a not in transform_order or b not in transform_order:
+                continue
+            if transform_order.index(a) > transform_order.index(b):
+                a, b = b, a
+            pairs.append(((t_id, a), (t_id, b)))
+            pvalues.append(row['pval_corrected'])
+        if pairs:
+            annotator = Annotator(ax, pairs, data=plot_df,
+                                  x='task_id', y='duration_seconds', hue='transform_type', verbose=False)
+            annotator.configure(
+                test=None, text_format='star', line_height=0.02)
+            annotator.set_pvalues_and_annotate(pvalues)
+
+    ax.set_ylabel("Duration (seconds)")
+    ax.set_xlabel("Task ID")
+    ax.legend(title="Transform Type")
+
+    if created_fig:
+        plt.tight_layout()

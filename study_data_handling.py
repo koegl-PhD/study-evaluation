@@ -426,6 +426,7 @@ def insert_study_results(
 ) -> pd.DataFrame:
 
     df = insert_bifurcations(df, path_gt, path_rt, tolerance_bifurcations)
+    df = insert_tres_bifurcations(df)
 
     df = insert_lymphnodes(df, path_gt, path_rt)
 
@@ -436,3 +437,31 @@ def insert_study_results(
               value=rad_contents['experienced'])
 
     return df
+
+
+### TREs ###
+
+def insert_tres_bifurcations(
+    df: pd.DataFrame
+) -> pd.DataFrame:
+    """Insert per-transform TRE into results: match on (patient_id, task_id, transform_type); others stay NaN."""
+
+    tres_linear = pd.read_csv("tres_linear_deformable.csv")
+
+    tres_long = tres_linear.melt(
+        id_vars=["patient_id", "task_id"],
+        value_vars=["tre_none", "tre_linear", "tre_nonlinear"],
+        var_name="tre_kind",
+        value_name="tre_value",
+    )
+    kind_to_tt = {
+        "tre_none": "TransformType.NONE",
+        "tre_linear": "TransformType.LINEAR",
+        "tre_nonlinear": "TransformType.NONLINEAR",
+    }
+    tres_long["transform_type"] = tres_long["tre_kind"].map(kind_to_tt)
+    return df.merge(
+        tres_long[["patient_id", "task_id", "transform_type", "tre_value"]],
+        on=["patient_id", "task_id", "transform_type"],
+        how="left",
+    )
