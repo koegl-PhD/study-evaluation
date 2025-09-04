@@ -58,7 +58,7 @@ if __name__ == "__main__":
     pd.set_option('display.max_rows', 40)
     pd.set_option('display.width', 0)  # 0 means auto-detect the terminal width
 
-    path_radiologists = r"/home/fryderyk/Downloads/study_results"
+    path_radiologists = r"/Users/guangyaoquan/Downloads/gt_and_rt/study_results"
 
     participants: Dict[str, Dict[str, int | bool | str]] = {
         "rad_test": {
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         participants[rad_id]['path_rt'] = f"{path_radiologists}/{rad_id}"
         participants[rad_id]['path_log'] = f"{participants[rad_id]['path_rt']}/{rad_id}.log"
 
-    path_gt = r"/home/fryderyk/Downloads/SerielleCTs_nii_forHumans_annotations"
+    path_gt = r"/Users/guangyaoquan/Downloads/gt_and_rt/SerielleCTs_nii_forHumans_annotations"
 
     main(path_gt, participants)
 
