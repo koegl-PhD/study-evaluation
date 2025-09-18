@@ -1,0 +1,24 @@
+{
+    "a_vertebralis_r": ["a_vertebralis_r_rel"],
+    "a_vertebralis_l": ["a_vertebralis_l_rel"],
+    "a_carotisexterna_r": ["a_carotisexterna_r_rel"],
+    "a_carotisexterna_l": ["a_carotisexterna_l_rel"],
+    "lymph_node": ["lymph_node_abs"],
+    "recurrence": ["recurrence"],
+    "common": ["duration_seconds"],
+    "common_other": [
+        "pan_total_distance_px",
+        "pan_usage_count",
+        "zoom_total_distance_px",
+        "zoom_usage_count",
+        "slider_total_distance_mm",
+        "slider_usage_count",
+        "drag_scroll_total_distance_px",
+        "drag_scroll_usage_count",
+        "wheel_scroll_distance_c",
+        "synchronised_count"
+    ]
+}
+
+
+

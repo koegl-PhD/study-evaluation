@@ -1,0 +1,22 @@
+{
+    "rad_1": {
+        "group": 1,
+        "experienced": false
+    },
+    "rad_2": {
+        "group": 1,
+        "experienced": true
+    },
+    "rad_3": {
+        "group": 2,
+        "experienced": false
+    },
+    "rad_4": {
+        "group": 2,
+        "experienced": true
+    },
+    "rad_5": {
+        "group": 3,
+        "experienced": true
+    }
+}
