@@ -50,6 +50,8 @@ def main(
 
     df = pd.concat(df, ignore_index=True)
 
+    df = utils.apply_corrections(df)
+
     df.to_csv('results.csv', index=False)
 
     json.dump(participants, open('participants.json', 'w'), indent=4)
@@ -80,6 +82,14 @@ if __name__ == "__main__":
         "rad_3": {
             "group": 2,
             "experienced": False,
+        },
+        "rad_4": {
+            "group": 2,
+            "experienced": True,
+        },
+        "rad_5": {
+            "group": 3,
+            "experienced": True,
         }
     }
     for rad_id in participants.keys():
