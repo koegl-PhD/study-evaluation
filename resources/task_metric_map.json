@@ -5,8 +5,9 @@
     "a_carotisexterna_l": ["a_carotisexterna_l_rel"],
     "lymph_node": ["lymph_node_abs"],
     "recurrence": ["recurrence"],
-    "common": ["duration_seconds"],
-    "common_other": [
+    "common": [
+        "duration_seconds"],
+    "workflow": [
         "pan_total_distance_px",
         "pan_usage_count",
         "zoom_total_distance_px",
@@ -15,7 +16,9 @@
         "slider_usage_count",
         "drag_scroll_total_distance_px",
         "drag_scroll_usage_count",
-        "wheel_scroll_distance_c",
+        "wheel_scroll_distance_c"
+    ],
+    "common_other": [
         "synchronised_count"
     ]
 }

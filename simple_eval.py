@@ -3,6 +3,7 @@ import json
 from typing import Dict, List
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 import all_evaluations
@@ -39,7 +40,11 @@ def main():
 
         df_filtered = df_new[df_new['task_id'] == task].reset_index(drop=True)
 
-        for res in task_metric_map[task] + task_metric_map["common"]:
+        # accumulators for combined workflow load z-score
+        wl_sum = {"NONE": 0.0, "LINEAR": 0.0, "NONLINEAR": 0.0}
+        wl_count = 0
+
+        for res in task_metric_map[task] + task_metric_map["common"] + task_metric_map["workflow"]:
 
             if task == "recurrence" and res == "recurrence":
                 temp = df_filtered.groupby("transform_type")[res].sum()
@@ -47,6 +52,24 @@ def main():
             elif res.endswith("_abs_5"):
                 temp = df_filtered.groupby("transform_type")[res].mean()
                 temp = utils.convert_vals_to_percent(temp.to_dict())
+            elif res in task_metric_map["workflow"]:
+                temp = df_filtered.groupby("transform_type")[res].mean().reindex([
+                    "NONE", "LINEAR", "NONLINEAR"])
+                vals = temp.values.astype(float)
+
+                # z-scores across transform types (handle zero variance)
+                std = np.nanstd(vals, ddof=0)
+                zscores = np.zeros_like(vals) if not np.isfinite(
+                    std) or std == 0 else (vals - np.nanmean(vals)) / std
+                zdict = dict(
+                    zip(["NONE", "LINEAR", "NONLINEAR"], map(float, zscores)))
+
+                for k in wl_sum:
+                    wl_sum[k] += zdict[k]
+                wl_count += 1
+
+                # skip storing per-metric entries; we add a single combined entry after the loop
+                continue
             else:
                 temp = df_filtered.groupby("transform_type")[res].mean()
 
@@ -67,7 +90,21 @@ def main():
 
             means[task][res] = temp
 
+        # add combined workflow load (average of per-metric z-scores)
+        if wl_count > 0:
+            means[task]["Workflow load (z-score)"] = {
+                k: wl_sum[k] / wl_count for k in wl_sum}
+
     x = 0
+
+    means = {
+        "A. Vertebralis R.": means["a_vertebralis_r"],
+        "A. Vertebralis L.": means["a_vertebralis_l"],
+        "A. Carotis Externa R.": means["a_carotisexterna_r"],
+        "A. Carotis Externa L.": means["a_carotisexterna_l"],
+        "Lymph Node": means["lymph_node"],
+        "Recurrence": means["recurrence"],
+    }
 
     for task, results in means.items():
         print(f"Task: {task}")

@@ -115,10 +115,12 @@ def latex_escape(s: str) -> str:
 def add_arrow(metric: str) -> str:
     """Add up/down arrow depending on metric type."""
     m = metric.lower()
-    if "duration" in m.lower() or "distance" in m.lower():   # distance & duration
+    if "duration" in m or "distance" in m:   # distance & duration
         return latex_escape(metric) + r" $\downarrow$"
     if "accuracy" in m or "correct" in m:  # correctness
         return latex_escape(metric) + r" $\uparrow$"
+    if "workflow" in m or "rel" in m:
+        return latex_escape(metric) + r" $\downarrow$"
     return latex_escape(metric)
 
 
@@ -127,7 +129,7 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
     metric_rows = []  # (task, metric, NONE, LINEAR, NONLINEAR)
     for task, metrics in data.items():
         for metric, vals in metrics.items():
-            if task == "recurrence" and metric == "recurrence":
+            if metric.lower() == "recurrence":
                 continue
             if not isinstance(vals, dict):
                 continue
@@ -146,7 +148,15 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
                     (latex_escape(task), latex_escape(metric), *fmt_vals))
 
     # Build LaTeX for metrics
-    metrics_table = r"""\begin{table*}[ht]
+    metrics_table = r"""
+        \begin{table*}[ht]
+
+        \begin{minipage}{\textwidth}
+
+        \captionsetup{width=\textwidth}
+        \caption{Per-task metrics (means/proportions) by transform type for experienced radiologists. Values in \textbf{bold} indicate the best performance per row.}
+        \label{tab:task_metric_by_transform}
+
         \centering
         \begin{tabular}{l l r r r}
         \toprule
@@ -158,7 +168,7 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
     for row in metric_rows:
         by_task[row[0]].append(row)
 
-    for task in sorted(by_task.keys()):
+    for task in by_task.keys():
         rows = by_task[task]
         for i, (_, metric, n, l, nl) in enumerate(rows):
             task_cell = task if i == 0 else ""
@@ -168,7 +178,8 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
 
             # decide whether smaller or larger is better
             m = metric.lower()
-            if "duration" in m or "distance" in m or "rel" in m:
+            if ("duration" in m or "distance" in m or "rel" in m
+                    or "workflow" in m or "z-score" in m):
                 best_idx = values.index(min(values))   # smaller is better
             else:
                 best_idx = values.index(max(values))   # larger is better
@@ -192,12 +203,12 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
 
     metrics_table += r"""\bottomrule
         \end{tabular}
-        \caption{Per-task metrics (means/proportions) by transform type.}
+        \end{minipage}
         \end{table*}
         """
 
     # Build LaTeX for recurrence (Correct/Incorrect/Accuracy only)
-    rec = data.get("recurrence", {}).get("recurrence", {})
+    rec = data.get("Recurrence", {}).get("recurrence", {})
     rec_rows = []
     for tt in ["NONE", "LINEAR", "NONLINEAR"]:
         block = rec.get(tt, {})
@@ -207,7 +218,14 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
         acc = (corr / total) if total > 0 else math.nan
         rec_rows.append((tt, corr, inc, acc))
 
-    recurrence_table = r"""\begin{table}[ht]
+    recurrence_table = r"""
+        \begin{table}[ht]
+            \begin{minipage}{\columnwidth}
+
+            \captionsetup{width=\linewidth}
+            \caption{Recurrence results by transform type (counts and accuracy) for experienced radiologists.}
+            \label{tab:recurrence_correctness_by_transform}
+
         \centering
         \begin{tabular}{l r r r}
         \toprule
@@ -220,7 +238,7 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
 
     recurrence_table += r"""\bottomrule
         \end{tabular}
-        \caption{Recurrence results by transform type (counts and accuracy).}
+        \end{minipage}
         \end{table}
         """
 
