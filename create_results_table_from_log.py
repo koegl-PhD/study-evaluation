@@ -52,9 +52,9 @@ def main(
 
     df = utils.apply_corrections(df)
 
-    df.to_csv('results.csv', index=False)
+    df.to_csv('outputs/results.csv', index=False)
 
-    json.dump(participants, open('participants.json', 'w'), indent=4)
+    json.dump(participants, open('outputs/participants.json', 'w'), indent=4)
 
     x = 0
 
