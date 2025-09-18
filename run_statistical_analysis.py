@@ -30,22 +30,65 @@ def main():
         }
     }
 
-
-
     # get df where "calibration" is not in patient_id
-    df = df[~df['patient_id'].str.contains('calibration')].reset_index(drop=True)
+    # df = df[~df['patient_id'].str.contains('calibration')].reset_index(drop=True)
 
     # where (user_id == 'rad_1' and transform_type == TransformType.NONLINEAR) or (user_id == 'rad_3' and transform_type == TransformType.NONE)
-    df = df[(df['user_id'] == 'rad_1') & (df['transform_type'] == 'TransformType.NONLINEAR') |
-            (df['user_id'] == 'rad_3') & (df['transform_type'] == 'TransformType.NONE')].reset_index(drop=True)
-    
+    df = df[(df['user_id'] == 'rad_1') & (df['transform_type'] == 'TransformType.LINEAR') |
+            (df['user_id'] == 'rad_3') & (df['transform_type'] == 'TransformType.NONLINEAR') |
+            (df['patient_id'].str.contains('calibration_1')) |
+            (df['patient_id'].str.contains('calibration_3')) |
+            (df['patient_id'].str.contains('calibration_4'))
+
+            ].reset_index(drop=True)
+    # only keep rad_1 and rad_3
+    df = df[df['user_id'].isin(['rad_1', 'rad_3'])].reset_index(drop=True)
+
     # where task is neither lymph_node or recurrence
-    df = df[~df['task_id'].isin(['lymph_node', 'recurrence'])].reset_index(drop=True)
-    
+    df = df[~df['task_id'].isin(
+        ['lymph_node', 'recurrence'])].reset_index(drop=True)
+
+    # average duration_seconds by user_id and task_id
+    avg_duration = df.groupby(['user_id', 'task_id', 'transform_type'])[
+        'duration_seconds'].mean().reset_index()
+
+    # drop all columns except for user_id,experienced,group,patient_id,transform_type,task_id,task_index,duration_seconds,a_vertebralis_r_rel,a_vertebralis_l_rel,a_carotisexterna_r_rel,a_carotisexterna_l_rel,bifurcation_tre,
+    keep = [
+        'patient_id',
+        'user_id', 'transform_type',
+        'task_id', 'task_index', 'duration_seconds', 'bifurcation_tre',
+    ]
+    df = df[keep]
     df.to_csv('filtered_results.csv', index=False)
 
-    # average duration_seconds by user_id and task_id 
-    avg_duration = df.groupby(['user_id', 'task_id', 'transform_type'])['duration_seconds'].mean().reset_index()
+    # opposite of melt on user_id
+    calibration_task_indices = {
+        f"task_idx_{i:04d}" for i in [21, 22, 23, 24, 33, 34, 35, 36]}
+    df['is_calibration'] = df['task_index'].isin(calibration_task_indices)
+
+    # Split calibration vs non-calibration
+    calibration_df = df[df['is_calibration']]
+    non_calibration_df = df[~df['is_calibration']]
+
+    baseline_means = calibration_df.groupby(
+        'user_id')['duration_seconds'].mean()
+
+    non_calibration_df['duration_relative'] = non_calibration_df.apply(
+        lambda row: row['duration_seconds'] / baseline_means[row['user_id']],
+        axis=1
+    )
+    # non_calibration_df.to_csv("temp.csv")
+
+
+    temp = pd.read_csv("temp_2.csv")
+
+    # plot diff_tre vs diff_dur_rel
+    plt.scatter(temp['diff_tre'], temp['diff_dur_rel'])
+    plt.xlabel('Difference in TRE')
+    plt.ylabel('Difference in Relative Duration')
+    plt.title('Difference in TRE vs Difference in Relative Duration')
+    plt.grid()
+    plt.savefig('diff_tre_vs_diff_dur_rel.png')
 
     x = 0
 
