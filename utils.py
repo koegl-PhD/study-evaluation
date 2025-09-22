@@ -106,7 +106,7 @@ def convert_vals_to_percent(values: Dict[str, float]) -> Dict[str, str]:
     """
     Convert values to percentages.
     """
-    return {key: f"{val * 100.0:.2f}%" for key, val in values.items()}
+    return {key: f"{val * 100.0:.3g}%" for key, val in values.items()}
 
 
 def latex_escape(s: str) -> str:
@@ -126,7 +126,7 @@ def add_arrow(metric: str) -> str:
     return latex_escape(metric)
 
 
-def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tuple[str, str]:
+def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], float_fmt: str = "{:.3g}") -> Tuple[str, str]:
     """Return (metrics_table, recurrence_table) LaTeX strings from the nested results dict."""
     metric_rows = []  # (task, metric, NONE, LINEAR, NONLINEAR)
     for (task, metrics_mean), (_, metrics_std) in zip(data_mean.items(), data_std.items()):
@@ -197,9 +197,9 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
             formatted = []
             for j, (val_stripped, val) in enumerate(zip(values, stds)):
                 if "Correctness" in metric:
-                    val_str = f"{100*val_stripped:.0f}\\% ± {100*val:.0f}\\%"
+                    val_str = f"{100*val_stripped:.3g}\\% ± {100*val:.3g}\\%"
                 else:
-                    val_str = f"{val_stripped:.2f} ± {val}"
+                    val_str = f"{val_stripped:.3g} ± {val}"
                 if j == best_idx:
                     val_str = r"\textbf{" + val_str + "}"
                 formatted.append(val_str)
@@ -242,7 +242,7 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
         \midrule
         """
     for tt, c, i, a in rec_rows:
-        acc_str = "-" if math.isnan(a) else f"{a*100:.1f}\\%"
+        acc_str = "-" if math.isnan(a) else f"{a*100:.3g}\\%"
         recurrence_table += f"{tt} & {c} & {i} & {acc_str} \\\\\n"
 
     recurrence_table += r"""\bottomrule
@@ -284,8 +284,8 @@ def make_tre_tabular(df: pd.DataFrame, tasks: List[str]) -> str:
                                 0.05) else ""
         rows.append((
             task_replace.get(task, task),
-            f"{r_dur.correlation:.5f} (p={r_dur.pvalue:.5f}){sig_dur}",
-            f"{r_err.correlation:.5f} (p={r_err.pvalue:.5f}){sig_err}",
+            f"{r_dur.correlation:.3g} (p={r_dur.pvalue:.3g}){sig_dur}",
+            f"{r_err.correlation:.3g} (p={r_err.pvalue:.3g}){sig_err}",
         ))
     header = r"""
                 \begin{table*}[ht]
@@ -312,3 +312,8 @@ def make_tre_tabular(df: pd.DataFrame, tasks: List[str]) -> str:
                 \end{table*}
             """
     return header + "\n" + body + footer
+
+
+def epsilon_squared_kw(H: float, N: int, k: int) -> float:
+    """Kruskal–Wallis epsilon squared effect size."""
+    return max(0.0, (H - k + 1) / (N - k))
