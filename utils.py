@@ -1,12 +1,12 @@
-from scipy import stats
-from typing import List
 import math
 
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
+from scipy import stats
+import statsmodels.api as sm
 
 
 def is_point_in_ROI(point: np.ndarray[Any, Any], center: np.ndarray[Any, Any], size: np.ndarray[Any, Any]) -> bool:
@@ -317,3 +317,120 @@ def make_tre_tabular(df: pd.DataFrame, tasks: List[str]) -> str:
 def epsilon_squared_kw(H: float, N: int, k: int) -> float:
     """Kruskal–Wallis epsilon squared effect size."""
     return max(0.0, (H - k + 1) / (N - k))
+
+
+def fit_piecewise_mixed_grid(
+    df: pd.DataFrame,
+    y_col: str,
+    tre_col: str,
+    group_col: str,
+    candidates_mm: np.ndarray,
+) -> dict:
+    """Grid-search one-breakpoint mixed model: Y ~ min(TRE,c) + max(0,TRE-c) + (1|group)."""
+    best = {"aic": np.inf, "c": None, "params": None, "result": None}
+    # linear baseline for ΔAIC
+    lin_exog = sm.add_constant(df[[tre_col]])
+    lin_mod = sm.MixedLM(endog=df[y_col], exog=lin_exog, groups=df[group_col]).fit(
+        reml=True, disp=False)
+    for c in candidates_mm:
+        x1 = np.minimum(df[tre_col].values, c)
+        x2 = np.maximum(0.0, df[tre_col].values - c)
+        exog = sm.add_constant(np.column_stack([x1, x2]))
+        try:
+            res = sm.MixedLM(endog=df[y_col], exog=exog, groups=df[group_col]).fit(
+                reml=True, disp=False)
+        except Exception:
+            continue
+        if res.aic < best["aic"]:
+            best = {"aic": float(res.aic), "c": float(
+                c), "params": res.params.copy(), "result": res}
+    if best["result"] is None:
+        return {"ok": False}
+    p = best["params"]
+    pre_slope = float(p[1])
+    post_slope = float(p[1] + p[2])
+    return {
+        "ok": True,
+        "breakpoint_mm": best["c"],
+        "intercept": float(p[0]),
+        "pre_slope_per_mm": pre_slope,
+        "post_slope_per_mm": post_slope,
+        "aic_piecewise": best["aic"],
+        "aic_linear": float(lin_mod.aic),
+        "delta_aic": float(lin_mod.aic - best["aic"]),
+    }
+
+
+def fit_piecewise_fe_grid(
+    df: pd.DataFrame,
+    y_col: str,
+    tre_col: str,
+    group_col: str,
+    candidates_mm: np.ndarray,
+) -> Dict[str, Any]:
+    """Grid-search 1-breakpoint FE OLS: Y ~ min(TRE,c)+max(0,TRE-c)+task FEs; returns best c and slopes."""
+    # Ensure numeric/categorical consistency
+    y = pd.to_numeric(df[y_col], errors="coerce")
+    tre = pd.to_numeric(df[tre_col], errors="coerce")
+    grp = df[group_col].astype(str)
+
+    # Row mask and aligned series
+    mask = ~(y.isna() | tre.isna() | grp.isna())
+    y, tre, grp = y[mask], tre[mask], grp[mask]
+
+    # Task fixed effects (drop_first to avoid dummy trap)
+    dummies = pd.get_dummies(grp, drop_first=True,
+                             prefix=group_col).astype(float)
+
+    # ----- Linear FE baseline (for ΔAIC) with aligned indices -----
+    base_lin = pd.DataFrame({"const": 1.0, tre_col: tre}, index=tre.index)
+    X_lin = base_lin.join(dummies)
+    mask_lin = ~X_lin.isna().any(axis=1)
+    X_lin = X_lin.loc[mask_lin].astype(float)
+    y_lin = y.loc[mask_lin].to_numpy()
+    lin_mod = sm.OLS(y_lin, X_lin).fit()
+
+    # ----- Piecewise FE grid search -----
+    best_aic: float = float("inf")
+    best_c: float | None = None
+    best_res = None
+
+    for c in candidates_mm:
+        base_pw = pd.DataFrame(
+            {
+                "const": 1.0,
+                "x1": np.minimum(tre.to_numpy(), c),
+                "x2": np.maximum(0.0, tre.to_numpy() - c),
+            },
+            index=tre.index,
+        )
+        X = base_pw.join(dummies)
+        mask_X = ~X.isna().any(axis=1)
+        X = X.loc[mask_X].astype(float)
+        y_X = y.loc[mask_X].to_numpy()
+
+        try:
+            res = sm.OLS(y_X, X).fit()
+        except Exception:
+            continue
+
+        if res.aic < best_aic:
+            best_aic, best_c, best_res = float(res.aic), float(c), res
+
+    if best_res is None or best_c is None:
+        return {"ok": False}
+
+    params = best_res.params
+    pre_slope = float(params["x1"])
+    post_slope = float(params["x1"] + params["x2"])
+
+    return {
+        "ok": True,
+        "breakpoint_mm": best_c,
+        "intercept": float(params["const"]),
+        "pre_slope_per_mm": pre_slope,
+        "post_slope_per_mm": post_slope,
+        "aic_piecewise": best_aic,
+        "aic_linear": float(lin_mod.aic),
+        "delta_aic": float(lin_mod.aic - best_aic),
+    }
