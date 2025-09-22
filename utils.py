@@ -126,11 +126,11 @@ def add_arrow(metric: str) -> str:
     return latex_escape(metric)
 
 
-def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tuple[str, str]:
+def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tuple[str, str]:
     """Return (metrics_table, recurrence_table) LaTeX strings from the nested results dict."""
     metric_rows = []  # (task, metric, NONE, LINEAR, NONLINEAR)
-    for task, metrics in data.items():
-        for metric, vals in metrics.items():
+    for (task, metrics_mean), (_, metrics_std) in zip(data_mean.items(), data_std.items()):
+        for metric, vals in metrics_mean.items():
             if metric.lower() == "recurrence":
                 continue
             if not isinstance(vals, dict):
@@ -140,10 +140,9 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
                 fmt_vals = []
                 for k in keys:
                     v = vals[k]
-                    if isinstance(v, bool):
-                        fmt_vals.append(float_fmt.format(1.0 if v else 0.0))
-                    elif isinstance(v, (int, float)):
-                        fmt_vals.append(float_fmt.format(v))
+                    if isinstance(v, (int, float)):
+                        fmt_vals.append(
+                            f"{float_fmt.format(v)} ± {float_fmt.format(metrics_std[metric][k])}")
                     else:
                         fmt_vals.append("-")
                 metric_rows.append(
@@ -176,7 +175,15 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
             task_cell = task if i == 0 else ""
 
             # convert back to floats for comparison
-            values = [float(n), float(l), float(nl)]
+            # remove ± and anything after
+            n_strip = n.split("±")[0].strip() if "±" in n else n
+            n_std = n.split("±")[1].strip() if "±" in n else ""
+            l_strip = l.split("±")[0].strip() if "±" in l else l
+            l_std = l.split("±")[1].strip() if "±" in l else ""
+            nl_strip = nl.split("±")[0].strip() if "±" in nl else nl
+            nl_std = nl.split("±")[1].strip() if "±" in nl else ""
+            values = [float(n_strip), float(l_strip), float(nl_strip)]
+            stds = [float(n_std), float(l_std), float(nl_std)]
 
             # decide whether smaller or larger is better
             m = metric.lower()
@@ -188,11 +195,11 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
 
             # rebuild values with bold for best
             formatted = []
-            for j, val in enumerate(values):
+            for j, (val_stripped, val) in enumerate(zip(values, stds)):
                 if "Correctness" in metric:
-                    val_str = f"{100*val:.0f}\\%"
+                    val_str = f"{100*val_stripped:.0f}\\% ± {100*val:.0f}\\%"
                 else:
-                    val_str = f"{val:.2f}"
+                    val_str = f"{val_stripped:.2f} ± {val}"
                 if j == best_idx:
                     val_str = r"\textbf{" + val_str + "}"
                 formatted.append(val_str)
@@ -210,7 +217,7 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
         """
 
     # Build LaTeX for recurrence (Correct/Incorrect/Accuracy only)
-    rec = data.get("Recurrence", {}).get("recurrence", {})
+    rec = data_mean.get("Recurrence", {}).get("recurrence", {})
     rec_rows = []
     for tt in ["NONE", "LINEAR", "NONLINEAR"]:
         block = rec.get(tt, {})
