@@ -1,6 +1,8 @@
+from scipy import stats
+from typing import List
 import math
-from typing import Dict, Any, Tuple
-from typing import Any, Dict
+
+from typing import Any, Dict, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -243,3 +245,63 @@ def json_to_latex_tables(data: Dict[str, Any], float_fmt: str = "{:.2f}") -> Tup
         """
 
     return metrics_table, recurrence_table
+
+
+def make_tre_tabular(df: pd.DataFrame, tasks: List[str]) -> str:
+    """Build LaTeX tabular (booktabs) summarizing means and Spearman correlations per task. Expects df already filtered/cleaned."""
+    results = [t + "_rel" for t in tasks[:-1]] + ["lymph_node_abs"]
+    rows = []
+
+    task_replace = {
+        "a_vertebralis_r": "A. Vertebralis R.",
+        "a_vertebralis_l": "A. Vertebralis L.",
+        "a_carotisexterna_r": "A. Carotis Externa R.",
+        "a_carotisexterna_l": "A. Carotis Externa L.",
+        "lymph_node": "Lymph Node",
+        "recurrence": "Recurrence",
+    }
+
+    for task, result in zip(tasks, results):
+        gt_error = "lymph_node_tre" if "lymph" in task else "bifurcation_tre"
+        df_sub = df.loc[df["task_id"] == task, [
+            "duration_seconds", result, gt_error]].dropna(subset=[gt_error])
+        if df_sub.empty:
+            continue
+        r_dur = stats.spearmanr(
+            df_sub[gt_error], df_sub["duration_seconds"], nan_policy="omit")
+        r_err = stats.spearmanr(
+            df_sub[gt_error], df_sub[result], nan_policy="omit")
+        sig_dur = r"$^{*}$" if (r_dur.pvalue is not None and r_dur.pvalue <
+                                0.05) else ""
+        sig_err = r"$^{*}$" if (r_err.pvalue is not None and r_err.pvalue <
+                                0.05) else ""
+        rows.append((
+            task_replace.get(task, task),
+            f"{r_dur.correlation:.5f} (p={r_dur.pvalue:.5f}){sig_dur}",
+            f"{r_err.correlation:.5f} (p={r_err.pvalue:.5f}){sig_err}",
+        ))
+    header = r"""
+                \begin{table*}[ht]
+
+                \begin{minipage}{\textwidth}
+
+                \captionsetup{width=\textwidth}
+                \caption{Spearman correlation between the TRE at the location of the tasks and the duration and error for experienced radiologists.}
+                \label{tab:task_metric_by_transform}
+
+                \centering
+                \begin{tabular}{l r r}
+                \toprule
+                Task & $\rho$(TRE,Duration) (p) & $\rho$(TRE,Error) (p) \\
+                \midrule
+            """
+    body = "\n".join(
+        [f"{t}& {rd} & {re} \\\\" for t, rd, re in rows])
+
+    footer = r"""
+                \bottomrule
+                \end{tabular}
+                \end{minipage}
+                \end{table*}
+            """
+    return header + "\n" + body + footer
