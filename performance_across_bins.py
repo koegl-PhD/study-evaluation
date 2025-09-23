@@ -175,21 +175,16 @@ def main():
 
     RESULTS
     To assess whether registration quality (as measured by target registration error, TRE) influenced radiologist performance, we categorized tasks into three TRE bins: good (<5 mm), moderate (5–10 mm), and poor (>10 mm). This binning reflects clinically interpretable accuracy thresholds commonly used in registration evaluation.
-
     Task duration and landmark error were compared across bins using the Kruskal–Wallis test with Dunn’s post-hoc tests (Holm correction), and effect sizes were quantified with ε².
-
     Radiologists were significantly faster in the <5 mm bin (mean = 21 s) compared to the >10 mm bin (mean = 41 s, p < 1×10⁻⁹, ε² = 0.135, large effect). Similarly, landmark error was significantly lower in the <5 mm bin (mean = 3.0 mm) compared to the >10 mm bin (mean = 6.8 mm, p = 0.000004, ε² = 0.075, medium effect). By contrast, differences between <5 mm and 5–10 mm were not significant for either duration or error, suggesting that radiologists tolerated TRE up to ~10 mm without measurable degradation.
-
     To confirm that this effect was nonlinear rather than gradual, we fitted piecewise fixed-effects regression models with task as a covariate. These revealed thresholds at ~18 mm for duration (ΔAIC = 20.6 vs linear) and ~26 mm for error (ΔAIC = 5.6 vs linear). Both models fit better than linear alternatives, supporting the interpretation that radiologist performance remained stable up to a threshold and then declined.
-    
+    Spearman correlations between TRE and performance metrics showed moderate positive associations with task duration for some tasks (ρ = 0.43–0.45, p < 0.001) but generally weaker or absent associations with error (Table X). These weaker correlations reflect the nonlinear threshold effect identified in our binning and piecewise analyses: radiologist performance remains stable for TRE <10 mm, diluting monotonic associations across the full TRE range.
     
     📌 Discussion
     Our analyses consistently indicate that radiologist performance does not degrade linearly with TRE but instead follows a threshold pattern. Performance remained stable up to ~10 mm TRE and deteriorated markedly above this level. The categorical binning analysis provides strong evidence for this ~10 mm threshold, with large effect sizes for duration and moderate effects for error.
-
     Piecewise regression models suggested somewhat higher thresholds (~18 mm for duration and ~26 mm for error). However, these estimates were driven by very few datapoints in the extreme tail of the TRE distribution (≤5 cases above 26 mm, ≤13 above 18 mm), making them less robust. We therefore consider the ~10 mm threshold identified in the binning analysis to be the more clinically meaningful cut-off, while the piecewise models strengthen the conclusion that performance declines nonlinearly rather than gradually.
-
     Notably, when TRE was included as a continuous predictor in linear mixed-effects models, no significant association with performance was found. This apparent discrepancy is explained by the threshold nature of the effect: linear models fail to capture the plateau–drop-off pattern, whereas categorical and piecewise approaches make it visible.
-    
+    While correlations suggested some link between TRE and duration, the weaker associations with error and across tasks highlight that radiologist performance does not degrade gradually with increasing TRE. Instead, our categorical and piecewise analyses demonstrate that performance remains stable until a usability threshold is exceeded.
 
 
     “New registration algorithms should prioritize robustness and failure prevention over incremental accuracy improvements below ~10 mm. The critical clinical need is to ensure that registrations remain within a usability threshold (~10 mm TRE), since radiologists’ performance only degrades once this threshold is exceeded. Thus, robustness against difficult cases and prevention of extreme misalignments may yield greater clinical impact than optimizing mean TRE values by a few millimeters.”
