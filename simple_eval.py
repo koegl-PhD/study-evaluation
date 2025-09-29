@@ -50,8 +50,17 @@ def main():
 
             std = None
             if task == "recurrence" and res == "recurrence":
-                temp = df_filtered.groupby("transform_type")[res].sum()
-                temp = utils.count_confusion_values(temp.to_dict())
+                temp1 = df_filtered.groupby("transform_type")[res].sum()
+                temp1 = utils.count_confusion_values(temp1.to_dict())
+
+                temp = {
+                    "NONE": temp1["NONE"]["Correct"] / (temp1["NONE"]["Correct"] + temp1["NONE"]["Incorrect"]),
+                    "LINEAR": temp1["LINEAR"]["Correct"] / (temp1["LINEAR"]["Correct"] + temp1["LINEAR"]["Incorrect"]),
+                    "NONLINEAR": temp1["NONLINEAR"]["Correct"] / (temp1["NONLINEAR"]["Correct"] + temp1["NONLINEAR"]["Incorrect"]),
+                }
+
+                # zero std
+                std = {"NONE": 0.0, "LINEAR": 0.0, "NONLINEAR": 0.0}
             elif res.endswith("_abs_5"):
                 temp = df_filtered.groupby("transform_type")[res].mean()
                 temp = utils.convert_vals_to_percent(temp.to_dict())
@@ -103,7 +112,7 @@ def main():
                 res = "Duration (s)"
             elif "rel" in res:
                 res = "Distance (mm)"
-            elif "abs" in res:
+            elif "abs" in res or "recurrence" in res.lower():
                 res = "Correctness (\\%)"
 
             means[task][res] = temp
@@ -135,11 +144,9 @@ def main():
         "Recurrence": stds["recurrence"],
     }
 
-    metrics_tex, recurrence_tex = utils.json_to_latex_tables(means, stds)
+    metrics_tex = utils.json_to_latex_tables(means, stds)
     with open("outputs/metrics_table.tex", "w") as f:
         f.write(metrics_tex)
-    with open("outputs/recurrence_table.tex", "w") as f:
-        f.write(recurrence_tex)
     x = 0
 
 

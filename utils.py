@@ -131,8 +131,6 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
     metric_rows = []  # (task, metric, NONE, LINEAR, NONLINEAR)
     for (task, metrics_mean), (_, metrics_std) in zip(data_mean.items(), data_std.items()):
         for metric, vals in metrics_mean.items():
-            if metric.lower() == "recurrence":
-                continue
             if not isinstance(vals, dict):
                 continue
             keys = ["NONE", "LINEAR", "NONLINEAR"]
@@ -141,8 +139,12 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
                 for k in keys:
                     v = vals[k]
                     if isinstance(v, (int, float)):
-                        fmt_vals.append(
-                            f"{float_fmt.format(v)} ± {float_fmt.format(metrics_std[metric][k])}")
+                        if "recurrence" not in metric.lower():
+                            fmt_vals.append(
+                                f"{float_fmt.format(v)} ± {float_fmt.format(metrics_std[metric][k])}")
+                        else:
+                            fmt_vals.append(
+                                f"{float_fmt.format(v)}")
                     else:
                         fmt_vals.append("-")
                 metric_rows.append(
@@ -174,8 +176,6 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
         for i, (_, metric, n, l, nl) in enumerate(rows):
             task_cell = task if i == 0 else ""
 
-            # convert back to floats for comparison
-            # remove ± and anything after
             n_strip = n.split("±")[0].strip() if "±" in n else n
             n_std = n.split("±")[1].strip() if "±" in n else ""
             l_strip = l.split("±")[0].strip() if "±" in l else l
@@ -183,24 +183,28 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
             nl_strip = nl.split("±")[0].strip() if "±" in nl else nl
             nl_std = nl.split("±")[1].strip() if "±" in nl else ""
             values = [float(n_strip), float(l_strip), float(nl_strip)]
-            stds = [float(n_std), float(l_std), float(nl_std)]
+            stds = [float(n_std) if n_std else 0.0, float(l_std)
+                    if l_std else 0.0, float(nl_std) if nl_std else 0.0]
 
-            # decide whether smaller or larger is better
             m = metric.lower()
             if ("duration" in m or "distance" in m or "rel" in m
                     or "workflow" in m or "z-score" in m):
-                best_idx = values.index(min(values))   # smaller is better
+                best_val = min(values)
             else:
-                best_idx = values.index(max(values))   # larger is better
+                best_val = max(values)
 
-            # rebuild values with bold for best
+            best_idxs = [idx for idx, v in enumerate(values) if math.isclose(
+                v, best_val, rel_tol=1e-12, abs_tol=0.0)]
+
             formatted = []
-            for j, (val_stripped, val) in enumerate(zip(values, stds)):
-                if "Correctness" in metric:
-                    val_str = f"{100*val_stripped:.3g}\\% ± {100*val:.3g}\\%"
+            for j, (val_stripped, std_val) in enumerate(zip(values, stds)):
+                if "recurrence" in task.lower() and "Correctness" in metric:
+                    val_str = f"{100*val_stripped:.3g}\\%"
+                elif "Correctness" in metric:
+                    val_str = f"{100*val_stripped:.3g}\\% ± {100*std_val:.3g}\\%"
                 else:
-                    val_str = f"{val_stripped:.3g} ± {val}"
-                if j == best_idx:
+                    val_str = f"{val_stripped:.3g} ± {std_val}"
+                if j in best_idxs:
                     val_str = r"\textbf{" + val_str + "}"
                 formatted.append(val_str)
 
@@ -216,42 +220,7 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
         \end{table*}
         """
 
-    # Build LaTeX for recurrence (Correct/Incorrect/Accuracy only)
-    rec = data_mean.get("Recurrence", {}).get("recurrence", {})
-    rec_rows = []
-    for tt in ["NONE", "LINEAR", "NONLINEAR"]:
-        block = rec.get(tt, {})
-        corr = int(block.get("Correct", 0))
-        inc = int(block.get("Incorrect", 0))
-        total = corr + inc
-        acc = (corr / total) if total > 0 else math.nan
-        rec_rows.append((tt, corr, inc, acc))
-
-    recurrence_table = r"""
-        \begin{table}[ht]
-            \begin{minipage}{\columnwidth}
-
-            \captionsetup{width=\linewidth}
-            \caption{Recurrence results by transform type (counts and accuracy) for experienced radiologists.}
-            \label{tab:recurrence_correctness_by_transform}
-
-        \centering
-        \begin{tabular}{l r r r}
-        \toprule
-        Transform & Correct & Incorrect & Accuracy \\
-        \midrule
-        """
-    for tt, c, i, a in rec_rows:
-        acc_str = "-" if math.isnan(a) else f"{a*100:.3g}\\%"
-        recurrence_table += f"{tt} & {c} & {i} & {acc_str} \\\\\n"
-
-    recurrence_table += r"""\bottomrule
-        \end{tabular}
-        \end{minipage}
-        \end{table}
-        """
-
-    return metrics_table, recurrence_table
+    return metrics_table
 
 
 def make_tre_tabular(df: pd.DataFrame, tasks: List[str]) -> str:
