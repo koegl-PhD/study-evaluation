@@ -24,9 +24,9 @@ def main():
     df_new = utils.remove_calibration(df)
     df_new.to_csv("temp.csv")
 
-    # keep only experienced radiologists
+    # keep only (in)experienced radiologists
     df_new = df_new[df_new['user_id'].isin(
-        [uid for uid, info in participants.items() if info['experienced']])].reset_index(drop=True)
+        [uid for uid, info in participants.items() if not info['experienced']])].reset_index(drop=True)
     # Clean transform_type labels
     df_new["transform_type"] = df_new["transform_type"].str.replace(
         "TransformType.", "")
