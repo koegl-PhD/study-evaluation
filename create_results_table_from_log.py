@@ -54,8 +54,6 @@ def main(
 
     df.to_csv('outputs/results.csv', index=False)
 
-    json.dump(participants, open('outputs/participants.json', 'w'), indent=4)
-
     x = 0
 
 
@@ -66,32 +64,9 @@ if __name__ == "__main__":
 
     path_radiologists = r"/data/registrationEvaluation/gt_and_rt/study_results"
 
-    participants: Dict[str, Dict[str, int | bool | str]] = {
-        # "rad_test": {
-        #     "group": 1,
-        #     "experienced": False,
-        # },
-        "rad_1": {
-            "group": 1,
-            "experienced": False,
-        },
-        "rad_2": {
-            "group": 1,
-            "experienced": True,
-        },
-        "rad_3": {
-            "group": 2,
-            "experienced": False,
-        },
-        "rad_4": {
-            "group": 2,
-            "experienced": True,
-        },
-        "rad_5": {
-            "group": 3,
-            "experienced": True,
-        }
-    }
+    participants: Dict[str, Dict[str, int | bool | str]
+                       ] = json.load(open('resources/participants.json'))
+
     for rad_id in participants.keys():
         participants[rad_id]['path_rt'] = f"{path_radiologists}/{rad_id}"
         participants[rad_id]['path_log'] = f"{participants[rad_id]['path_rt']}/{rad_id}.log"
