@@ -18,5 +18,9 @@
     "rad_5": {
         "group": 3,
         "experienced": true
+    },
+    "rad_6": {
+        "group": 3,
+        "experienced": false
     }
 }
