@@ -2,22 +2,18 @@ import json
 
 from typing import Dict
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-from pandas.testing import assert_frame_equal
-from scipy.stats import chi2_contingency, f_oneway, kruskal
 
 import log_parsing
-import all_evaluations
 import study_data_handling
 import utils
-import analysis_functions
 
 
 def main(
         path_gt: str,
-        participants: Dict[str, Dict[str, int | bool | str]]
+        participants: Dict[str, Dict[str, int | bool | str]],
+        path_dsc_init: str,
+        path_dsc_nifty: str
 ) -> None:
 
     df = []
@@ -52,6 +48,8 @@ def main(
 
     df = utils.apply_corrections(df)
 
+    df = study_data_handling.add_dsc(df, path_dsc_init, path_dsc_nifty)
+
     df.to_csv('outputs/results.csv', index=False)
 
     x = 0
@@ -64,6 +62,9 @@ if __name__ == "__main__":
 
     path_radiologists = r"/data/registrationEvaluation/gt_and_rt/study_results"
 
+    path_dsc_init = r"/data/registrationEvaluation/gt_and_rt/results_dsc_initial.csv"
+    path_dsc_nifty = r"/data/registrationEvaluation/gt_and_rt/results_dsc_niftyreg.csv"
+
     participants: Dict[str, Dict[str, int | bool | str]
                        ] = json.load(open('resources/participants.json'))
 
@@ -73,9 +74,4 @@ if __name__ == "__main__":
 
     path_gt = r"/data/registrationEvaluation/gt_and_rt/SerielleCTs_nii_forHumans_annotations"
 
-    main(path_gt, participants)
-
-# df[df['user_id'] == 'rad_test'][df['task_id'] ==
-#                                 'recurrence']['recurrence_abs'].value_counts()
-
-# df_sorted = df.sort_values(by="result_rel", ascending=False)
+    main(path_gt, participants, path_dsc_init, path_dsc_nifty)

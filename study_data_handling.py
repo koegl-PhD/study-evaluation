@@ -1,7 +1,7 @@
 import glob
 import json
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -470,4 +470,60 @@ def insert_study_results(
     return df
 
 
-### TREs ###
+####################################################################################
+##########################  DSC  ###################################################
+####################################################################################
+
+def _build_dice_map(df: pd.DataFrame) -> Dict[str, float]:
+    """
+    Build mapping: base name (split at '~') -> dice_mean.
+    """
+    name_col = "name" if "name" in df.columns else df.columns[0]
+    if "dice_mean" in df.columns:
+        dice_series = df["dice_mean"]
+    else:
+        dice_series = df.iloc[:, 10]
+        dice_series.name = "dice_mean"
+    base = df[name_col].astype(str).str.split("~", n=1, expand=True)[0]
+    return dict(zip(base, dice_series.astype(float), strict=False))
+
+
+def add_dsc(
+    df: pd.DataFrame,
+    path_dsc_init: str,
+    path_dsc_nifty: str
+) -> pd.DataFrame:
+    """
+    Load results and DSC tables, insert 'dsc' after 'bifurcation_tre'.
+    """
+    dsc_init = pd.read_csv(path_dsc_init)
+    dsc_nifty = pd.read_csv(path_dsc_nifty)
+
+    init_map = _build_dice_map(dsc_init)
+    nifty_map = _build_dice_map(dsc_nifty)
+
+    # Column checks
+    pid_col = "patient_id" if "patient_id" in df.columns else df.columns[3]
+    ttype_col = "transform_type" if "transform_type" in df.columns else "transform_type"
+
+    def pick_dsc(ttype: str, pid: str) -> Optional[float]:
+        """
+        Return DSC based on transform type and patient id.
+        """
+        if isinstance(ttype, str) and ttype.endswith(".NONE"):
+            return None
+        if isinstance(ttype, str) and ttype.endswith(".LINEAR"):
+            return init_map.get(pid)
+        if isinstance(ttype, str) and ttype.endswith("NONLINEAR"):
+            return nifty_map.get(pid)
+        return None
+
+    dsc_values = df.apply(
+        lambda r: pick_dsc(str(r.get(ttype_col, "")), str(r[pid_col])),
+        axis=1
+    )
+
+    insert_loc = df.columns.get_loc("bifurcation_tre") + 1
+    df.insert(insert_loc, "dsc", dsc_values)
+
+    return df
