@@ -488,6 +488,21 @@ def _build_dice_map(df: pd.DataFrame) -> Dict[str, float]:
     return dict(zip(base, dice_series.astype(float), strict=False))
 
 
+def _normalize_patient_id(pid: str) -> str:
+    prefixes = (
+        "calibration_1_start_",
+        "calibration_2_",
+        "calibration_3_",
+        "calibration_4_end_",
+    )
+
+    """Strip known calibration prefixes from patient_id."""
+    for pfx in prefixes:
+        if pid.startswith(pfx):
+            return pid[len(pfx):]
+    return pid
+
+
 def add_dsc(
     df: pd.DataFrame,
     path_dsc_init: str,
@@ -496,6 +511,7 @@ def add_dsc(
     """
     Load results and DSC tables, insert 'dsc' after 'bifurcation_tre'.
     """
+
     dsc_init = pd.read_csv(path_dsc_init)
     dsc_nifty = pd.read_csv(path_dsc_nifty)
 
@@ -510,6 +526,8 @@ def add_dsc(
         """
         Return DSC based on transform type and patient id.
         """
+        pid = _normalize_patient_id(str(pid))
+
         if isinstance(ttype, str) and ttype.endswith(".NONE"):
             return None
         if isinstance(ttype, str) and ttype.endswith(".LINEAR"):
