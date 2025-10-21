@@ -200,9 +200,44 @@ def compute_double_click_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.Da
 
 
 def compute_sync_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
-    """Compute count of user synchronised views."""
-    sub = df[df['action'] == 'User synchronised views']
-    return sub.groupby(group_keys).size().reset_index(name='synchronised_count')
+    """Compute how often and how long views remained synchronised."""
+    relevant_actions = ['User synchronised views', 'User unsynchronised views']
+    sub = df[df['action'].isin(relevant_actions)].copy()
+
+    if sub.empty:
+        return pd.DataFrame(columns=group_keys +
+                            ['synchronised_count', 'synchronised_duration_seconds'])
+
+    sub['timestamp'] = pd.to_datetime(
+        sub['timestamp'], format="%Y-%m-%d %H:%M:%S,%f", errors='coerce'
+    )
+    sub = sub.dropna(subset=['timestamp'])
+
+    if sub.empty:
+        return pd.DataFrame(columns=group_keys +
+                            ['synchronised_count', 'synchronised_duration_seconds'])
+
+    def _aggregate_sync(group: pd.DataFrame) -> pd.Series:
+        group = group.sort_values('timestamp')
+        sync_count = int((group['action'] == 'User synchronised views').sum())
+        sync_start: Optional[pd.Timestamp] = None
+        total_duration = 0.0
+
+        for action, timestamp in zip(group['action'], group['timestamp']):
+            if action == 'User synchronised views':
+                if sync_start is None:
+                    sync_start = timestamp
+            elif action == 'User unsynchronised views' and sync_start is not None:
+                total_duration += (timestamp - sync_start).total_seconds()
+                sync_start = None
+
+        return pd.Series({
+            'synchronised_count': sync_count,
+            'synchronised_duration_seconds': total_duration
+        })
+
+    stats = sub.groupby(group_keys).apply(_aggregate_sync).reset_index()
+    return stats
 
 
 def compute_arrow_key_stats(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
@@ -291,13 +326,14 @@ def aggregate_interaction_stats(df: pd.DataFrame) -> pd.DataFrame:
 
     # reorder columns: base, wheel dist, double-clicks, sync, then arrow-keys
     base_cols = [c for c in out.columns
-                 if not c.startswith(('double_click_', 'arrow_key_', 'synchronised_count'))
+                 if not c.startswith(('double_click_', 'arrow_key_', 'synchronised_'))
                  and c != 'wheel_scroll_distance_c']
     expected = ['Red1', 'Red2', 'Green1', 'Green2', 'Yellow1', 'Yellow2']
     dbl_cols = [f'double_click_{v}_count' for v in expected]
     arrow_cols = [c for c in out.columns if c.startswith('arrow_key_')]
     out = out[base_cols + ['wheel_scroll_distance_c'] +
-              dbl_cols + ['synchronised_count'] + arrow_cols]
+              dbl_cols + ['synchronised_count',
+                          'synchronised_duration_seconds'] + arrow_cols]
 
     return out
 
