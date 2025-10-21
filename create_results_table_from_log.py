@@ -50,14 +50,14 @@ def main(
 
     df = study_data_handling.add_dsc(df, path_dsc_init, path_dsc_nifty)
 
-    df = utils.combine_bifurcaitons(df)
+    df = utils.combine_tres(df)
     # """
 
-    # df = pd.read_csv('outputs/results_combined.csv')
+    # df = pd.read_csv('outputs/results.csv')
 
     df = utils.reorder_columns(df)
 
-    df.to_csv('outputs/results_combined.csv', index=False)
+    df.to_csv('outputs/results.csv', index=False)
 
     x = 0
 

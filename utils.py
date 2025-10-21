@@ -405,11 +405,11 @@ def fit_piecewise_fe_grid(
     }
 
 
-def combine_bifurcaitons(df: pd.DataFrame) -> pd.DataFrame:
+def combine_tres(df: pd.DataFrame) -> pd.DataFrame:
 
     rel_cols = [
         "a_vertebralis_r_rel", "a_vertebralis_l_rel",
-        "a_carotisexterna_r_rel", "a_carotisexterna_l_rel"
+        "a_carotisexterna_r_rel", "a_carotisexterna_l_rel",
     ]
 
     abs_cols = [
@@ -433,6 +433,18 @@ def combine_bifurcaitons(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df[cols]
 
+    # now combine bifurcation_tre with lymph_node_tre into tre
+    df["tre"] = df[["bifurcation_tre", "lymph_node_tre"]].bfill(
+        axis=1).iloc[:, 0]
+
+    # drop originals
+    df = df.drop(columns=["bifurcation_tre", "lymph_node_tre"])
+
+    # now combine bifurcation_abs and lymph_node_abs into abs
+    df["abs"] = df[["bifurcation_abs", "lymph_node_abs"]].bfill(
+        axis=1).iloc[:, 0]
+    df = df.drop(columns=["bifurcation_abs", "lymph_node_abs"])
+
     return df
 
 
@@ -446,11 +458,10 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # switch columns 8 and 9
     cols.insert(8, cols.pop(cols.index("bifurcation_error")))
-    cols.insert(10, cols.pop(cols.index("lymph_node_abs")))
-    cols.insert(11, cols.pop(cols.index("recurrence")))
-    cols.insert(13, cols.pop(cols.index("lymph_node_tre")))
+    cols.insert(9, cols.pop(cols.index("abs")))
+    cols.insert(10, cols.pop(cols.index("recurrence")))
+    cols.insert(11, cols.pop(cols.index("tre")))
 
     df = df[cols]
-
 
     return df
