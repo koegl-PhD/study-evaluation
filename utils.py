@@ -459,8 +459,9 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
     # switch columns 8 and 9
     cols.insert(8, cols.pop(cols.index("bifurcation_error")))
     cols.insert(9, cols.pop(cols.index("abs")))
-    cols.insert(10, cols.pop(cols.index("recurrence")))
-    cols.insert(11, cols.pop(cols.index("tre")))
+    cols.insert(10, cols.pop(cols.index("recurrence_confusion")))
+    cols.insert(11, cols.pop(cols.index("recurrence_abs")))
+    cols.insert(12, cols.pop(cols.index("tre")))
 
     df = df[cols]
 

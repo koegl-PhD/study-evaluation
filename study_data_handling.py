@@ -414,9 +414,10 @@ def insert_recurrence(
         path_rt: str
 ) -> pd.DataFrame:
 
-    df['recurrence'] = None
-    df['recurrence'] = pd.Categorical(
-        df['recurrence'], categories=['tp', 'fp', 'tn', 'fn'])
+    df['recurrence_confusion'] = None
+    df['recurrence_abs'] = None
+    df['recurrence_confusion'] = pd.Categorical(
+        df['recurrence_confusion'], categories=['tp', 'fp', 'tn', 'fn'])
 
     for index, row in df.iterrows():
         if row['task_id'] == 'recurrence':
@@ -425,14 +426,18 @@ def insert_recurrence(
             recurrence_gt = get_gt_recurrence(
                 path_gt, row['patient_id'])
 
-            value = None
+            value_confusion = None
+            value_abs = None
 
             if recurrence_gt is None and recurrence_rt is None:
-                value = 'tn'
+                value_confusion = 'tn'
+                value_abs = True
             elif recurrence_gt is None and recurrence_rt is not None:
-                value = 'fp'
+                value_confusion = 'fp'
+                value_abs = False
             elif recurrence_gt is not None and recurrence_rt is None:
-                value = 'fn'
+                value_confusion = 'fn'
+                value_abs = False
             elif recurrence_gt is not None and recurrence_rt is not None:
 
                 # check if recurrence_rt is inside the GT recurrence ROI
@@ -442,9 +447,11 @@ def insert_recurrence(
                 correct = utils.is_point_in_ROI(
                     recurrence_rt, center, size)
 
-                value = 'tp' if correct else 'fp'
+                value_confusion = 'tp' if correct else 'fp'
+                value_abs = correct
 
-            df.at[index, 'recurrence'] = value
+            df.at[index, 'recurrence_confusion'] = value_confusion
+            df.at[index, 'recurrence_abs'] = value_abs
 
     return df
 
