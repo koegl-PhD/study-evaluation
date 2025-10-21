@@ -403,3 +403,54 @@ def fit_piecewise_fe_grid(
         "aic_linear": float(lin_mod.aic),
         "delta_aic": float(lin_mod.aic - best_aic),
     }
+
+
+def combine_bifurcaitons(df: pd.DataFrame) -> pd.DataFrame:
+
+    rel_cols = [
+        "a_vertebralis_r_rel", "a_vertebralis_l_rel",
+        "a_carotisexterna_r_rel", "a_carotisexterna_l_rel"
+    ]
+
+    abs_cols = [
+        "a_vertebralis_r_abs_5", "a_vertebralis_l_abs_5",
+        "a_carotisexterna_r_abs_5", "a_carotisexterna_l_abs_5"
+    ]
+
+    df["bifurcation_error"] = df[rel_cols].bfill(axis=1).iloc[:, 0]
+    df["bifurcation_abs"] = df[abs_cols].bfill(axis=1).iloc[:, 0]
+
+    # find insertion index = position of first of the original columns
+    insert_at = df.columns.get_loc(rel_cols[0])
+
+    # remove originals
+    df = df.drop(columns=rel_cols + abs_cols)
+
+    # move new columns to original position
+    cols = list(df.columns)
+    for col in ["bifurcation_abs", "bifurcation_error"][::-1]:
+        cols.insert(insert_at, cols.pop(cols.index(col)))
+
+    df = df[cols]
+
+    return df
+
+
+def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
+
+    df_ori = df.copy()
+
+    df = df_ori.copy()
+
+    cols = list(df.columns)
+
+    # switch columns 8 and 9
+    cols.insert(8, cols.pop(cols.index("bifurcation_error")))
+    cols.insert(10, cols.pop(cols.index("lymph_node_abs")))
+    cols.insert(11, cols.pop(cols.index("recurrence")))
+    cols.insert(13, cols.pop(cols.index("lymph_node_tre")))
+
+    df = df[cols]
+
+
+    return df

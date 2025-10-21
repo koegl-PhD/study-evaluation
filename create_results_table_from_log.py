@@ -17,7 +17,7 @@ def main(
 ) -> None:
 
     df = []
-
+    # """
     for rad_contents in participants.values():
 
         path_log = str(rad_contents['path_log'])
@@ -50,7 +50,14 @@ def main(
 
     df = study_data_handling.add_dsc(df, path_dsc_init, path_dsc_nifty)
 
-    df.to_csv('outputs/results.csv', index=False)
+    df = utils.combine_bifurcaitons(df)
+    # """
+
+    # df = pd.read_csv('outputs/results_combined.csv')
+
+    df = utils.reorder_columns(df)
+
+    df.to_csv('outputs/results_combined.csv', index=False)
 
     x = 0
 
