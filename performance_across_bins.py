@@ -15,7 +15,7 @@ import utils
 
 def main():
     # Load the results
-    df = pd.read_csv('results.csv')
+    df = pd.read_csv('outputs/results.csv')
 
     participants: Dict[str, Dict[str, int | bool | str]
                        ] = json.load(open('resources/participants.json'))
