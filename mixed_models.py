@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Tuple
 import warnings
+import math
 
 from typing import Any
 
@@ -219,6 +220,82 @@ def is_complex_model_better(base_model: Any, slope_model: Any) -> bool:
         return False
 
 
+def _pct_change_from_coef(coef: float) -> float:
+    return (np.exp(coef) - 1.0) * 100.0
+
+
+def _extract_effect(model: Any, predictor: str) -> Tuple[float, float, float, float]:
+    """
+    Return (% change, % CI low, % CI high, p-value) for predictor.
+    """
+    beta = float(model.params[predictor])
+    pval = float(model.pvalues[predictor])
+    ci_low, ci_high = map(float, model.conf_int().loc[predictor])
+    pct = _pct_change_from_coef(beta)
+    pct_low = _pct_change_from_coef(ci_low)
+    pct_high = _pct_change_from_coef(ci_high)
+    return pct, pct_low, pct_high, pval
+
+
+def _fmt_pct_ci(pct: float, lo: float, hi: float) -> str:
+    # +314 % (148–590 %)
+    return f"{pct:+.0f}\\% [{lo:.0f}--{hi:.0f}\\%]"
+
+
+def _fmt_p_latex(p: float) -> str:
+    # "< 10^{-3}" for very small p, else "x.x×10^{-k}" in math mode, else 3 sig figs
+    # if p < 1e-3:
+    #     return "$<10^{-3}$"
+    exp = int(math.floor(math.log10(p))) if p > 0 else 0
+    if p < 0.1:
+        mant = p / (10 ** exp)
+        return f"${mant:.2f}\\times10^{{{exp}}}$"
+    return f"{p:.3f}"
+
+
+def build_latex_table_duration(per_task: List[Tuple[str, float, float, float, float]],
+                               combined: Tuple[float, float, float, float]) -> str:
+    """
+    LaTeX table with per-task % change (with CI) & p, plus a 4-row-spanning combined column.
+    per_task: list of (task, pct, pct_low, pct_high, p)
+    combined: (pct, pct_low, pct_high, p)
+    """
+    order = ["a_vertebralis_r", "a_vertebralis_l",
+             "a_carotisexterna_r", "a_carotisexterna_l"]
+    pt_map: Dict[str, Tuple[float, float, float, float]] = {
+        t: (pct, lo, hi, p) for t, pct, lo, hi, p in per_task
+    }
+    rows = [(t, *pt_map[t]) for t in order if t in pt_map]
+    comb_pct, comb_lo, comb_hi, comb_p = combined
+
+    lines = []
+    lines.append("\\begin{table*}[t]")
+    lines.append("  \\centering")
+    lines.append("  \\caption{Effect of registration accuracy (log\\_dsc) on task duration. Entries show percent change per log-unit with 95\\% CI and p-values. Combined columns report a pooled model over vertebralis/carotis tasks.}")
+    lines.append("  \\label{tab:duration_effects}")
+    lines.append("  \\begin{tabular}{@{}lcccc@{}}")
+    lines.append("    \\toprule")
+    lines.append(
+        "    \\textbf{Task} & \\textbf{\\% change (95\\% CI)} & \\textbf{p} & \\multicolumn{2}{c}{\\textbf{Combined (vertebralis + carotis)}}\\\\")
+    lines.append("    \\cmidrule(lr){4-5}")
+    lines.append("    & & & \\% change (95\\% CI) & p \\\\")
+    lines.append("    \\midrule")
+    for i, (task, pct, lo, hi, p) in enumerate(rows):
+        if i == 0:
+            lines.append(
+                f"    {task} & {_fmt_pct_ci(pct, lo, hi)} & {_fmt_p_latex(p)} & "
+                f"\\multirow{{4}}{{*}}{{{_fmt_pct_ci(comb_pct, comb_lo, comb_hi)}}} & "
+                f"\\multirow{{4}}{{*}}{{{_fmt_p_latex(comb_p)}}} \\\\"
+            )
+        else:
+            lines.append(
+                f"    {task} & {_fmt_pct_ci(pct, lo, hi)} & {_fmt_p_latex(p)} & & \\\\")
+    lines.append("    \\bottomrule")
+    lines.append("  \\end{tabular}")
+    lines.append("\\end{table*}")
+    return "\n".join(lines)
+
+
 def main() -> None:
 
     df = pd.read_csv('outputs/results.csv')
@@ -266,6 +343,9 @@ def main() -> None:
     df['log_bif_error'] = np.log1p(df['bifurcation_error'])
     df['log_duration'] = np.log1p(df['duration_seconds'])
 
+    per_task_duration: List[Tuple[str, float, float]] = []
+    combined_duration: Tuple[float, float] = (float("nan"), float("nan"))
+
     # remvoe uncessecasry tasks
     df_ori = df.copy()
     for task_subset in task_subsets:
@@ -295,6 +375,8 @@ def main() -> None:
             sns.histplot(model_dur.resid, kde=True)
             summarize_model_base(model_dur, "Task Duration (log_duration)",
                                  predictor, "duration seconds")
+            pct, lo, hi, p = _extract_effect(model_dur, predictor)
+            per_task_duration.append((task_subset[0], pct, lo, hi, p))
         else:
             model_acc_all = smf.mixedlm(
                 f"{responses[1]} ~ {predictor}",
@@ -310,6 +392,9 @@ def main() -> None:
             sns.histplot(model_acc_all.resid, kde=True)
             summarize_model_all_tasks(model_acc_all, "Radiologist Duration Full Model",
                                       predictor, "bifurcation error")
+            comb_pct, comb_lo, comb_hi, comb_p = _extract_effect(
+                model_acc_all, predictor)
+            combined_duration = (comb_pct, comb_lo, comb_hi, comb_p)
 
         # (B) Radiologist accuracy model
         if len(task_subset) == 1:
@@ -342,6 +427,19 @@ def main() -> None:
             summarize_model_all_tasks(model_acc_all, "Radiologist Accuracy Full Model",
                                       predictor, "bifurcation error")
 
+    latex_table = build_latex_table_duration(
+        per_task_duration, combined_duration)
+
+    latex_table = latex_table.replace("a_vertebralis_r", "A. Vertebralis R.")
+    latex_table = latex_table.replace("a_vertebralis_l", "A. Vertebralis L.")
+    latex_table = latex_table.replace(
+        "a_carotisexterna_r", "A. Carotis Externa R.")
+    latex_table = latex_table.replace(
+        "a_carotisexterna_l", "A. Carotis Externa L.")
+
+    with open("outputs/mixed_models_table.tex", "w") as f:
+        f.write(latex_table)
+
     # lymph node detection (boolean column: 'abs')
     task_subset = [
         "lymph_node",
@@ -371,24 +469,28 @@ def main() -> None:
 
     print(model_recur.summary())
 
-    task_subset = [
-        "lymph_node",
-        "recurrence",
-    ]
-    df = df_ori[df_ori["task_id"].isin(task_subset)].reset_index(drop=True)
-
-    # combine recurrence_abs and abs into detection_success
-    df["detection_success"] = df[["abs", "recurrence_abs"]].bfill(axis=1).iloc[:, 0]
-
-    model_detection = smf.glm(
-        "detection_success ~ log_dsc * C(task_id)",
-        data=df[df["task_id"].isin(["lymph_node", "recurrence"])],
-        family=sm.families.Binomial()
-    ).fit()
-    print(model_detection.summary())
-
     x = 0
 
+
+"""
+task_subset = [
+    "lymph_node",
+    "recurrence",
+]
+df = df_ori[df_ori["task_id"].isin(task_subset)].reset_index(drop=True)
+
+# combine recurrence_abs and abs into detection_success
+df["detection_success"] = df[["abs", "recurrence_abs"]].bfill(axis=1).iloc[:, 0]
+
+model_detection = smf.glm(
+    "detection_success ~ log_dsc * C(task_id)",
+    data=df[df["task_id"].isin(["lymph_node", "recurrence"])],
+    family=sm.families.Binomial()
+).fit()
+print(model_detection.summary())
+
+x = 0
+"""
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
