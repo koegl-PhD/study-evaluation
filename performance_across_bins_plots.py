@@ -152,8 +152,24 @@ def plot_tre_violins(df: pd.DataFrame, out_path: str) -> None:
             pc.set_edgecolor("black")
             # pc.set_linewidth(0.5)
 
+    for ax, (exp, df_exp) in zip(g.axes.flat, work.groupby("experience", sort=False)):
+        grouped = df_exp.groupby("TRE_bin")["bifurcation_error"]
+        stats = grouped.agg(['count', 'mean', 'std'])
+        for i, (label, row) in enumerate(stats.iterrows()):
+            ax.text(
+                i, ax.get_ylim()[0] - (ax.get_ylim()[1] *
+                                       0.085),  # slightly below axis
+                f"count=${int(row['count'])}$\n${row['mean']:.2f}\\pm{row['std']:.2f}mm$",
+                ha="center", va="top", fontsize=12
+            )
+
+    for ax in g.axes.flat:
+        ax.set_xlabel("TRE bin", labelpad=35)
+
     g.fig.tight_layout()
     g.fig.savefig(out_path, dpi=300)
+
+    x = 0
 
 
 def main() -> None:
