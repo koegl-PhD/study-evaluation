@@ -466,3 +466,27 @@ def reorder_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df[cols]
 
     return df
+
+
+def compute_workflow_z(df: pd.DataFrame) -> pd.DataFrame:
+    """Add z_score: per-metric z within (user_id, transform_type), then row-wise mean."""
+    workflow_metrics: list[str] = [
+        "pan_total_distance_px", "pan_usage_count",
+        "zoom_total_distance_px", "zoom_usage_count",
+        "slider_total_distance_mm", "slider_usage_count",
+        "drag_scroll_total_distance_px", "drag_scroll_usage_count",
+        "wheel_scroll_distance_c",
+    ]
+    df[workflow_metrics] = df[workflow_metrics].apply(
+        pd.to_numeric, errors="coerce")
+
+    for m in workflow_metrics:
+        zcol = f"{m}__z"
+        df[zcol] = df.groupby(["user_id", "transform_type"], dropna=False)[m].transform(
+            lambda x: (x - x.mean()) /
+            x.std(ddof=0) if x.std(ddof=0) not in (0.0, np.nan) else 0.0
+        )
+
+    zcols: list[str] = [f"{m}__z" for m in workflow_metrics]
+    df["z_score"] = df[zcols].mean(axis=1)
+    return df

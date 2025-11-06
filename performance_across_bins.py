@@ -9,6 +9,7 @@ import scikit_posthocs as sp
 from scipy.stats import kruskal
 import seaborn as sns
 import statsmodels.api as sm
+from scipy.stats import shapiro, normaltest, levene, bartlett
 
 import utils
 
@@ -22,25 +23,23 @@ def main():
 
     df = utils.remove_calibration(df)
 
-    df = df[df['user_id'].isin(
-        [uid for uid, info in participants.items() if info['experienced']])].reset_index(drop=True)
+    df = df[df['user_id'].isin([uid for uid, info in participants.items() if info['experienced'] == False])].reset_index(drop=True)  # nopep8
     # keep only where transform_type is not NONE
     df = df[df["transform_type"] !=
             "TransformType.NONE"].reset_index(drop=True)
+    # df = df[~((df['transform_type'] != 'TransformType.NONE') & (df['synchronised_count'] == 0))].reset_index(drop=True)  # nopep8
 
     rel_cols = [c for c in df.columns if c.endswith("_rel")]
     task_to_errorcol = {c.replace("_rel", ""): c for c in rel_cols}
 
     dfs = []
     for task_id, df_task in df.groupby("task_id"):
-        base_name = task_id
-        if base_name in task_to_errorcol:
-            error_col = task_to_errorcol[base_name]
-        else:
+
+        if not task_id.startswith('a_'):
             continue
+
         tmp = df_task[["task_index", "duration_seconds",
-                       "bifurcation_tre", error_col, "transform_type"]].copy()
-        tmp = tmp.rename(columns={error_col: "task_error"})
+                       "tre", 'bifurcation_error', "transform_type"]].copy()
         tmp["task_id"] = task_id
         dfs.append(tmp)
 
@@ -50,16 +49,33 @@ def main():
     bins = [0, 5, 10, np.inf]
     labels = ["good (<5)", "moderate (5-10)", "poor (>10)"]
     df_all2["TRE_bin"] = pd.cut(
-        df_all2["bifurcation_tre"], bins=bins, labels=labels, right=True)
+        df_all2["tre"], bins=bins, labels=labels, right=True)
+
+    # for col in ["duration_seconds", "bifurcation_error"]:
+    #     print(f"\nNormality check for {col}:")
+    #     for name, group in df_all2.groupby("TRE_bin"):
+    #         if len(group) >= 3:  # Shapiro requires at least 3 values
+    #             stat, p = shapiro(group[col])
+    #             print(f"  {name}: p={p:.3f}")
+
+    groups_dur = [g["duration_seconds"].values for _,
+                  g in df_all2.groupby("TRE_bin") if len(g) > 0]
+    groups_err = [g["bifurcation_error"].values for _,
+                  g in df_all2.groupby("TRE_bin") if len(g) > 0]
+
+    stat_lev_dur, p_lev_dur = levene(*groups_dur)
+    stat_lev_err, p_lev_err = levene(*groups_err)
+    # print(f"\nLevene duration p={p_lev_dur:.3f}")
+    # print(f"Levene error p={p_lev_err:.3f}")
 
     # Compute mean duration and error per bin for experienced only
     summary_exp = df_all2.groupby(
-        "TRE_bin")[["duration_seconds", "task_error"]].agg(["mean", "std", "count"])
+        "TRE_bin")[["duration_seconds", "bifurcation_error"]].agg(["mean", "std", "count"])
 
     # Kruskal-Wallis test across TRE bins for experienced radiologists
     groups_duration = [g["duration_seconds"].values for _,
                        g in df_all2.groupby("TRE_bin")]
-    groups_error = [g["task_error"].values for _,
+    groups_error = [g["bifurcation_error"].values for _,
                     g in df_all2.groupby("TRE_bin")]
 
     # drop empty groups if any
@@ -85,7 +101,7 @@ def main():
 
     dunn_dur = sp.posthoc_dunn(df_all2, val_col="duration_seconds",
                                group_col="TRE_bin", p_adjust="holm").reindex(index=labels, columns=labels)
-    dunn_err = sp.posthoc_dunn(df_all2, val_col="task_error", group_col="TRE_bin",
+    dunn_err = sp.posthoc_dunn(df_all2, val_col="bifurcation_error", group_col="TRE_bin",
                                p_adjust="holm").reindex(index=labels, columns=labels)
 
     print()
@@ -111,11 +127,11 @@ def main():
     candidates = np.linspace(2, 40, 39)
 
     res_dur = utils.fit_piecewise_fe_grid(
-        df=df_all2, y_col="duration_seconds", tre_col="bifurcation_tre",
+        df=df_all2, y_col="duration_seconds", tre_col="tre",
         group_col="task_id", candidates_mm=candidates,
     )
     res_err = utils.fit_piecewise_fe_grid(
-        df=df_all2, y_col="task_error", tre_col="bifurcation_tre",
+        df=df_all2, y_col="bifurcation_error", tre_col="tre",
         group_col="task_id", candidates_mm=candidates,
     )
 
@@ -146,7 +162,9 @@ def main():
     x = 0
     """
 
-                    duration_seconds                  task_error                
+    Because all groups deviate significantly from normality, Kruskal–Wallis followed by Dunn–Holm post-hoc comparisons is the correct and statistically justified choice.
+
+                    duration_seconds                  bifurcation_error                
                                 mean        std count       mean       std count
     TRE_bin                                                                     
     good (<5)              21.123900  13.710998   150   2.977284  2.999141   150
@@ -190,7 +208,7 @@ def main():
     “New registration algorithms should prioritize robustness and failure prevention over incremental accuracy improvements below ~10 mm. The critical clinical need is to ensure that registrations remain within a usability threshold (~10 mm TRE), since radiologists’ performance only degrades once this threshold is exceeded. Thus, robustness against difficult cases and prevention of extreme misalignments may yield greater clinical impact than optimizing mean TRE values by a few millimeters.”
     
     # TODO
-    make this for lymphnode - problem: we dont have float values for task_error, only bool for correct/incorrect
+    make this for lymphnode - problem: we dont have float values for bifurcation_error, only bool for correct/incorrect
     """
 
 

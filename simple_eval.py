@@ -1,3 +1,5 @@
+from scipy.stats import mannwhitneyu
+from typing import Dict, Tuple
 import json
 
 from typing import Dict, List, Union
@@ -6,6 +8,17 @@ import numpy as np
 import pandas as pd
 
 import utils
+
+from typing import Tuple
+from scipy.stats import kruskal
+from statsmodels.stats.multitest import multipletests
+
+try:
+    import scikit_posthocs as sp
+    _HAS_SPKH = True
+except Exception:
+    _HAS_SPKH = False
+    from scipy.stats import mannwhitneyu
 
 
 NestedDict = Dict[str, Union[float, "NestedDict"]]
@@ -23,9 +36,140 @@ def average_nested_dicts(d1: NestedDict, d2: NestedDict) -> NestedDict:
     return result
 
 
+def _pairwise_dunn_holm(groups: Dict[str, np.ndarray]) -> Dict[Tuple[str, str], float]:
+    """Pairwise MWU p-values with Holm correction for (NONE, LINEAR, NONLINEAR)."""
+    keys = ["NONE", "LINEAR", "NONLINEAR"]
+    data = [np.asarray(groups[k], float) for k in keys]
+    pairs = [(keys[i], keys[j]) for i in range(3) for j in range(i + 1, 3)]
+
+    raw_ps = []
+    for i, j in [(0, 1), (0, 2), (1, 2)]:
+        u = mannwhitneyu(data[i], data[j],
+                         alternative="two-sided", method="asymptotic")
+        raw_ps.append(u.pvalue)
+
+    _, adj, _, _ = multipletests(raw_ps, method="holm")
+    return {pairs[k]: float(adj[k]) for k in range(3)}
+
+
+def run_kw_dunn_for_metric(df_task: pd.DataFrame, metric_col: str) -> Tuple[float, Dict[Tuple[str, str], float]]:
+    """Run Kruskal–Wallis across 3 transforms, then Dunn–Holm pairwise."""
+    groups = {
+        "NONE": df_task.loc[df_task["transform_type"] == "NONE", metric_col].dropna().values,
+        "LINEAR": df_task.loc[df_task["transform_type"] == "LINEAR", metric_col].dropna().values,
+        "NONLINEAR": df_task.loc[df_task["transform_type"] == "NONLINEAR", metric_col].dropna().values,
+    }
+    if any(len(v) == 0 for v in groups.values()):
+        return float("nan"), {(a, b): float("nan") for a in groups for b in groups if a < b}
+
+    kw = kruskal(groups["NONE"], groups["LINEAR"],
+                 groups["NONLINEAR"], nan_policy="omit")
+    pairwise = _pairwise_dunn_holm(groups) if np.isfinite(kw.pvalue) else {
+        (a, b): float("nan") for a in groups for b in groups if a < b}
+    return float(kw.pvalue), pairwise
+
+
+def significance_to_latex(df: pd.DataFrame, caption: str = "Pairwise significance results", label: str = "tab:significance") -> str:
+    """Convert significance DataFrame to LaTeX table for appendix."""
+    df_fmt = df.copy()
+
+    # format numeric p-values
+    def fmt_p(p: float) -> str:
+        if pd.isna(p):
+            return "-"
+        if p < 1e-3:
+            return f"\\textbf{{{p:.1e}}}"
+        elif p < 0.05:
+            return f"\\textbf{{{p:.3f}}}"
+        else:
+            return f"{p:.3f}"
+
+    df_fmt["kw_p"] = df_fmt["kw_p"].apply(fmt_p)
+    df_fmt["p_NONE_vs_LINEAR"] = df_fmt["p_NONE_vs_LINEAR"].apply(fmt_p)
+    df_fmt["p_NONE_vs_NONLINEAR"] = df_fmt["p_NONE_vs_NONLINEAR"].apply(fmt_p)
+    df_fmt["p_LINEAR_vs_NONLINEAR"] = df_fmt["p_LINEAR_vs_NONLINEAR"].apply(
+        fmt_p)
+
+    # rename columns for LaTeX
+    df_fmt = df_fmt.rename(columns={
+        "task": "Task",
+        "metric_raw": "Metric",
+        "kw_p": "Kruskal–Wallis $p$",
+        "p_NONE_vs_LINEAR": "$p_{None, Rigid}$",
+        "p_NONE_vs_NONLINEAR": "$p_{None, Deform.}$",
+        "p_LINEAR_vs_NONLINEAR": "$p_{Rigid, Deform.}$",
+    })
+
+    # convert to LaTeX string
+    latex = df_fmt.to_latex(
+        index=False,
+        escape=False,
+        column_format="llcccc",
+        caption=caption,
+        label=label,
+        longtable=False,
+    )
+
+    latex = latex.split("\n")
+
+    for idx, row in enumerate(latex):
+        row = row.replace("a_vertebralis_r", "A. Vertebralis R.")
+        row = row.replace("a_vertebralis_l", "A. Vertebralis L.")
+        row = row.replace(
+            "a_carotisexterna_r", "A. Carotis E. R.")
+        row = row.replace(
+            "a_carotisexterna_l", "A. Carotis E. L.")
+        row = row.replace("lymph_node", "Lymph Node")
+        row = row.replace(" recurrence ", " Recurrence ")
+
+        row = row.replace("bifurcation_error", "Matching error")
+        row = row.replace("duration_seconds", "Duration")
+        row = row.replace("z_score", "Workflow load")
+        row = row.replace("recurrence_abs", "Detection rate")
+        row = row.replace("abs", "Localization rate")
+
+        row = row.replace("recurrence", "Recurrence")
+
+        latex[idx] = row
+
+    latex[0] = latex[0].replace("table", "table*")
+    latex[-2] = latex[-2].replace("table", "table*")
+
+    latex[7] = latex[7].replace(
+        "A. Vertebralis R.", "\\multirow{3}{*}{A. Vertebralis R.}")
+    latex[8] = latex[8].replace("A. Vertebralis R.", " ")
+    latex[9] = latex[9].replace("A. Vertebralis R.", " ")
+    latex.insert(10, '\\addlinespace')
+
+    latex[11] = latex[11].replace(
+        "A. Vertebralis L.", "\\multirow{3}{*}{A. Vertebralis L.}")
+    latex[12] = latex[12].replace("A. Vertebralis L.", " ")
+    latex[13] = latex[13].replace("A. Vertebralis L.", " ")
+    latex.insert(14, '\\addlinespace')
+
+    latex[15] = latex[15].replace(
+        "A. Carotis E. R.", "\\multirow{3}{*}{A. Carotis E. R.}")
+    latex[16] = latex[16].replace("A. Carotis E. R.", " ")
+    latex[17] = latex[17].replace("A. Carotis E. R.", " ")
+    latex.insert(18, '\\addlinespace')
+
+    latex[19] = latex[19].replace(
+        "A. Carotis E. L.", "\\multirow{3}{*}{A. Carotis E. L.}")
+    latex[20] = latex[20].replace("A. Carotis E. L.", " ")
+    latex[21] = latex[21].replace("A. Carotis E. L.", " ")
+    latex.insert(22, '\\addlinespace')
+
+    latex.insert(26, '\\addlinespace')
+
+    latex.insert(19, '\\midrule')
+    latex.insert(23, '\\midrule')
+
+    return latex
+
+
 def main():
     # Load the results
-    df = pd.read_csv('results.csv')
+    df = pd.read_csv('outputs/results.csv')
 
     participants: Dict[str, Dict[str, int | bool | str]
                        ] = json.load(open('resources/participants.json'))
@@ -35,20 +179,57 @@ def main():
 
     df = utils.remove_calibration(df)
 
+    df = utils.compute_workflow_z(df)
+
     means_all = []
     stds_all = []
 
-    for experienced in [True, False]:
+    for experienced in [True]:  # [True, False]:
 
         # keep only (in)experienced radiologists
-        df_new = df[df['user_id'].isin(
-            [uid for uid, info in participants.items() if info['experienced'] == experienced])].reset_index(drop=True)
+        # df_new = df[df['user_id'].isin(
+        # [uid for uid, info in participants.items() if info['experienced'] == experienced])].reset_index(drop=True)
+        df_new = df.copy()
+        # remove all rows where transform_type is not NONE and where synchronised_count is 0
+        df_new = df_new[~((df_new['transform_type'] != 'TransformType.NONE') & (
+            df_new['synchronised_count'] == 0))].reset_index(drop=True)
+
         # Clean transform_type labels
         df_new["transform_type"] = df_new["transform_type"].str.replace(
             "TransformType.", "")
         # Extract numeric task index for sorting
         df_new["task_idx_num"] = df_new["task_index"].str.replace(
             "task_idx_", "").astype(int)
+
+        # --- Significance testing (Kruskal–Wallis + Dunn–Holm) ---
+        sig_rows: List[Dict[str, Union[str, float]]] = []
+
+        for task in tasks:
+            df_task = df_new[df_new["task_id"] == task].reset_index(drop=True)
+
+            metric_cols: List[str] = task_metric_map[task] + \
+                task_metric_map["common"] + ["z_score"]
+            for metric_col in metric_cols:
+                kw_p, pair_ps = run_kw_dunn_for_metric(df_task, metric_col)
+                sig_rows.append({
+                    "task": task,
+                    "metric_raw": metric_col,
+                    "kw_p": kw_p,
+                    "p_NONE_vs_LINEAR": pair_ps.get(("NONE", "LINEAR"), np.nan),
+                    "p_NONE_vs_NONLINEAR": pair_ps.get(("NONE", "NONLINEAR"), np.nan),
+                    "p_LINEAR_vs_NONLINEAR": pair_ps.get(("LINEAR", "NONLINEAR"), np.nan),
+                })
+
+        sig_df = pd.DataFrame(sig_rows)
+        sig_df.to_csv("outputs/new/significance_all.csv", index=False)
+
+        sig_latex = significance_to_latex(
+            sig_df, caption=f"Pairwise significance results for all radiologists", label=f"tab:significance_none_rigid_deformable")
+
+        with open(f"outputs/new/significance_table.tex", "w") as f:
+            f.write("\n".join(sig_latex))
+
+        # --- End significance testing ---
 
         means = {}
         stds = {}
@@ -127,7 +308,7 @@ def main():
 
                 if "duration" in res:
                     res = "Duration (s)"
-                elif "rel" in res:
+                elif "bifurcation_error" in res:
                     res = "Distance (mm)"
                 elif "abs" in res or "recurrence" in res.lower():
                     res = "Correctness (\\%)"
@@ -163,13 +344,20 @@ def main():
 
         means_all.append(means)
         stds_all.append(stds)
-    
+
     means = average_nested_dicts(means_all[0], means_all[1])
     stds = average_nested_dicts(stds_all[0], stds_all[1])
 
-    metrics_tex = utils.json_to_latex_tables(means, stds)
-    with open("outputs/metrics_table.tex", "w") as f:
+    metrics_tex = utils.json_to_latex_tables(means_all[1], stds_all[1])
+    with open("outputs/new/metrics_table_inexperienced.tex", "w") as f:
         f.write(metrics_tex)
+    metrics_tex = utils.json_to_latex_tables(means_all[0], stds_all[0])
+    with open("outputs/new/metrics_table_experienced.tex", "w") as f:
+        f.write(metrics_tex)
+    metrics_tex = utils.json_to_latex_tables(means, stds)
+    with open("outputs/new/metrics_table_all.tex", "w") as f:
+        f.write(metrics_tex)
+
     x = 0
 
 

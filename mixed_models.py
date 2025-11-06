@@ -1,8 +1,8 @@
-from typing import Any, Dict, List, Tuple
 import warnings
 import math
+import json
 
-from typing import Any
+from typing import Any, Dict, List, Tuple, List
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,6 +15,7 @@ from scipy import stats
 import statsmodels.api as sm  # add this import
 
 import utils
+from utils import compute_workflow_z
 
 
 def summarize_model_base(model: Any, name: str, predictor: str, response: str) -> None:
@@ -323,8 +324,15 @@ def main() -> None:
     df = df[df["transform_type"] !=
             "TransformType.NONE"].reset_index(drop=True)
 
-    # remove rows where synchronised_duration_seconds is 0.0
+    workflow_metrics = json.load(
+        open('resources/task_metric_map.json'))["workflow"]
+
+    df = compute_workflow_z(df)
+
+    # remove rows where synchronised_duration_seconds is 0.0 - only for linear and nonlinear
     df = df[df["synchronised_duration_seconds"] != 0.0].reset_index(drop=True)
+    # df = df[~((df['transform_type'] != 'TransformType.NONE') & (
+    # df['synchronised_count'] == 0))].reset_index(drop=True)
 
     task_subsets = [
         "a_vertebralis_r",
@@ -341,7 +349,7 @@ def main() -> None:
     print()
 
     # remove last 20 columns from df
-    df = df.iloc[:, :-20]
+    # df = df.iloc[:, :-20]
 
     # show all columns
     pd.set_option('display.max_columns', None)
@@ -349,25 +357,25 @@ def main() -> None:
     pd.set_option('display.width', 1000)
 
     # 1. Check distributions -  all are non normal and heavily left sewed
-    """
-    for col in ['dsc', 'bifurcation_error', 'duration_seconds', 'tre']:
-        sns.histplot(df[col], kde=True)
-        plt.title(col)
-        plt.show()
-        stat, p = stats.shapiro(df[col].dropna())
-        print(f"{col}: Shapiro p={p:.4f}")
-    """
+
+    # for col in ['z_score', 'dsc', 'bifurcation_error', 'duration_seconds', 'tre']:
+    #     sns.histplot(df[col], kde=True)
+    #     plt.title(col)
+    #     plt.show()
+    #     stat, p = stats.shapiro(df[col].dropna())
+    #     print(f"{col}: Shapiro p={p:.4f}")
 
     # 2. log-transform (since right-skewed)
     df['log_tre'] = np.log1p(df['tre'])
     df['log_dsc'] = np.log1p(df['dsc'].max() - df['dsc'])
     df['log_bif_error'] = np.log1p(df['bifurcation_error'])
     df['log_duration'] = np.log1p(df['duration_seconds'])
+    df['log_z_score'] = np.log1p(df['z_score'] - df['z_score'].min() + 1e-6)
 
     # remvoe uncessecasry tasks
     df_ori = df.copy()
     for predictor in ['log_tre', 'log_dsc']:
-        for output_var in ['log_duration', 'log_bif_error']:
+        for output_var in ['log_z_score', 'log_duration', 'log_bif_error']:
             per_task_duration: List[Tuple[str, float, float]] = []
             combined_duration: Tuple[float, float] = (
                 float("nan"), float("nan"))
@@ -474,7 +482,13 @@ def main() -> None:
                         ("Lymph node", ly_pct, ly_lo, ly_hi, ly_p),
                     ]
 
-            ovar = "duration" if output_var == 'log_duration' else "accuracy"
+            if output_var == 'log_duration':
+                ovar = "duration"
+            elif output_var == 'log_bif_error':
+                ovar = "accuracy"
+            else:
+                ovar = "workflow_load"
+
             latex_table = build_latex_table_duration(
                 per_task_duration, combined_duration, extra_rows, predictor[-3:], ovar)
 
@@ -489,7 +503,7 @@ def main() -> None:
             latex_table = latex_table.replace("lymph_node", "Lymph Node")
             latex_table = latex_table.replace("recurrence", "Recurrence")
 
-            with open(f"outputs/mixed_models_table_{predictor}_{ovar}.tex", "w") as f:
+            with open(f"outputs/new/mixed_models_table_{predictor}_{ovar}.tex", "w") as f:
                 f.write(latex_table)
 
     x = 0
