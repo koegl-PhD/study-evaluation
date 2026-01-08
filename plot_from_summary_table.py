@@ -1,3 +1,4 @@
+from typing import Sequence
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,28 @@ def propagated_sd(sd_a: Optional[float], sd_b: Optional[float]) -> Optional[floa
     if sd_a is None or sd_b is None:
         return None
     return float(np.sqrt(sd_a**2 + sd_b**2))
+
+
+def add_extra_left_column(
+    ax: plt.Axes,
+    y: np.ndarray,
+    labels: Sequence[str],
+    x: float = -0.25,
+) -> None:
+    """Add a text column left of the y-axis, aligned with existing y-ticks."""
+    if len(labels) != len(y):
+        raise ValueError("labels must match y")
+
+    for yi, lab in zip(y, labels):
+        ax.text(
+            x,
+            float(yi),
+            str(lab),
+            transform=ax.get_yaxis_transform(),
+            ha="right",
+            va="center",
+            clip_on=False,
+        )
 
 
 def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
@@ -172,11 +195,23 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
     )
 
     ax.set_yticks(y)
-    ax.set_yticklabels(labels)
+    ax.set_yticklabels(metrics)
     ax.invert_yaxis()
     ax.set_xlabel("Improvement vs None (signed so right = better)")
     ax.set_title("Δ-from-None by task and metric")
     ax.legend(loc="lower right")
+
+    y = np.arange(18)
+
+    labels_y = []
+    for i in range(len(metrics)):
+        if (i + 2) % 3 == 0:
+            labels_y.append(tasks[i])
+        else:
+            labels_y.append("")
+
+    add_extra_left_column(ax, y, labels_y, x=-0.30)
+    fig.subplots_adjust(left=0.45)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
