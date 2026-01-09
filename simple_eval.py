@@ -174,6 +174,26 @@ def calculate_standard_error(s: np.ndarray) -> float:
     return se
 
 
+def wilson_ci(x: int, n: int, z: float = 1.96) -> Tuple[float, float]:
+    """Wilson score CI for a binomial proportion."""
+    if n <= 0:
+        raise ValueError("n must be > 0")
+    p = x / n
+    denom = 1.0 + (z * z) / n
+    center = (p + (z * z) / (2.0 * n)) / denom
+    half = (z * math.sqrt((p * (1.0 - p) / n) + (z * z) / (4.0 * n * n))) / denom
+    lo = max(0.0, center - half)
+    hi = min(1.0, center + half)
+    return lo, hi
+
+
+def newcombe_diff_ci(x1: int, n1: int, x0: int, n0: int, z: float = 1.96) -> Tuple[float, float]:
+    """Newcombe CI for difference in proportions (p1 - p0) using Wilson intervals."""
+    l1, u1 = wilson_ci(x1, n1, z=z)
+    l0, u0 = wilson_ci(x0, n0, z=z)
+    return l1 - u0, u1 - l0
+
+
 def main():
     # Load the results
     df = pd.read_csv('outputs/results.csv')
@@ -190,6 +210,29 @@ def main():
 
     means_all = []
     stds_all = []
+
+    for_diff_plot = {
+        "lymph_node": {
+            "linear": {
+                "x_pos": 0,
+                "error": []
+            },
+            "nonlinear": {
+                "x_pos": 0,
+                "error": []
+            }
+        },
+        "recurrence": {
+            "linear": {
+                "x_pos": 0,
+                "error": []
+            },
+            "nonlinear": {
+                "x_pos": 0,
+                "error": []
+            }
+        }
+    }
 
     for experienced in [True]:  # [True, False]:
 
@@ -302,12 +345,55 @@ def main():
                     std = {}
 
                     if (task.lower() == 'lymph_node' or task.lower() == 'recurrence') and (res.lower().find('abs') != -1 or res.lower().find('recurrence') != -1):
-                        std_none = calculate_standard_error(
-                            df_filtered[df_filtered["transform_type"] == "NONE"][res].astype(int))
-                        std_linear = calculate_standard_error(
-                            df_filtered[df_filtered["transform_type"] == "LINEAR"][res].astype(int))
-                        std_nonlinear = calculate_standard_error(
-                            df_filtered[df_filtered["transform_type"] == "NONLINEAR"][res].astype(int))
+                        none = df_filtered[df_filtered["transform_type"] == "NONE"][res].astype(
+                            int).to_numpy()
+                        linear = df_filtered[df_filtered["transform_type"] == "LINEAR"][res].astype(
+                            int).to_numpy()
+                        nonlinear = df_filtered[df_filtered["transform_type"] == "NONLINEAR"][res].astype(
+                            int).to_numpy()
+
+                        x_none, n_none = int(none.sum()), int(none.size)
+                        x_linear, n_linear = int(
+                            linear.sum()), int(linear.size)
+                        x_nonlinear, n_nonlinear = int(
+                            nonlinear.sum()), int(nonlinear.size)
+
+                        p_none = x_none / n_none
+                        p_linear = x_linear / n_linear
+                        p_nonlinear = x_nonlinear / n_nonlinear
+
+                        delta_linear = p_linear - p_none
+                        delta_nonlinear = p_nonlinear - p_none
+
+                        ci_linear_lo, ci_linear_hi = newcombe_diff_ci(
+                            x_linear, n_linear, x_none, n_none)
+                        ci_nonlinear_lo, ci_nonlinear_hi = newcombe_diff_ci(
+                            x_nonlinear, n_nonlinear, x_none, n_none)
+
+                        xerr_linear = (delta_linear - ci_linear_lo,
+                                       ci_linear_hi - delta_linear)
+                        xerr_nonlinear = (
+                            delta_nonlinear - ci_nonlinear_lo, ci_nonlinear_hi - delta_nonlinear)
+
+                        # those are acutally proportions
+                        temp["NONE"] = p_none
+                        temp["LINEAR"] = p_linear
+                        temp["NONLINEAR"] = p_nonlinear
+
+                        lo, hi = wilson_ci(x_none, n_none)
+                        std_none = f"{lo}~{hi}"
+
+                        lo, hi = wilson_ci(x_linear, n_linear)
+                        std_linear = f"{lo}~{hi}"
+
+                        lo, hi = wilson_ci(x_nonlinear, n_nonlinear)
+                        std_nonlinear = f"{lo}~{hi}"
+
+                        for_diff_plot[task]["linear"]["x_pos"] = delta_linear
+                        for_diff_plot[task]["nonlinear"]["x_pos"] = delta_nonlinear
+                        for_diff_plot[task]["linear"]["error"] = xerr_linear
+                        for_diff_plot[task]["nonlinear"]["error"] = xerr_nonlinear
+
                     else:
                         std_none = df_filtered[df_filtered["transform_type"] ==
                                                "NONE"][res].std()
@@ -376,6 +462,9 @@ def main():
     metrics_tex = utils.json_to_latex_tables(means_all[0], stds_all[0])
     with open("outputs/new/metrics_table_all.tex", "w") as f:
         f.write(metrics_tex)
+
+    with open("outputs/new/diff_plot_data.json", "w") as f:
+        json.dump(for_diff_plot, f, indent=4)
 
     x = 0
 
