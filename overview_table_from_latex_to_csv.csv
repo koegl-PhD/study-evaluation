@@ -1,0 +1,19 @@
+Task,Metric,Registration,None,Rigid,Deformable
+A. Vertebralis R.,Matching error (mm),None,6.80 ± 8.13,5.96 ± 6.20,4.88 ± 5.60
+A. Vertebralis R.,Duration (s),None,53.4 ± 35.3,47.7 ± 29.5,32.6 ± 20.4
+A. Vertebralis R.,Workflow load (z-score),None,1.28 ± 0.329,-0.380 ± 0.519,-0.896 ± 0.216
+A. Vertebralis L.,Matching error (mm),None,6.15 ± 6.78,7.28 ± 9.08,4.07 ± 4.38
+A. Vertebralis L.,Duration (s),None,35.9 ± 23.5,40.3 ± 28.2,29.6 ± 25.7
+A. Vertebralis L.,Workflow load (z-score),None,0.877 ± 0.371,-0.531 ± 0.818,-0.346 ± 0.830
+A. Carotis E. R.,Matching error (mm),None,3.27 ± 4.72,3.04 ± 3.77,2.48 ± 2.50
+A. Carotis E. R.,Duration (s),None,37.5 ± 26.2,31.3 ± 27.1,23.4 ± 14.2
+A. Carotis E. R.,Workflow load (z-score),None,1.28 ± 0.194,-0.608 ± 0.542,-0.669 ± 0.472
+A. Carotis E. L.,Matching error (mm),None,4.19 ± 6.28,2.37 ± 1.41,2.81 ± 3.80
+A. Carotis E. L.,Duration (s),None,24.3 ± 15.5,24.3 ± 21.4,18.5 ± 13.0
+A. Carotis E. L.,Workflow load (z-score),None,1.23 ± 0.353,-0.561 ± 0.66,-0.672 ± 0.390
+Lymph Node,Localization rate (%),None,83.3% ± 4.39%,90% ± 3.87%,93.5% ± 3.12%
+Lymph Node,Duration (s),None,34.5 ± 27.8,24.3 ± 22.9,19.5 ± 17.4
+Lymph Node,Workflow load (z-score),None,1.27 ± 0.212,-0.378 ± 0.51,-0.894 ± 0.368
+Recurrence,Detection rate (%),None,66.7% ± 5.56%,67.2% ± 5.74%,65.7% ± 5.67%
+Recurrence,Duration (s),None,132 ± 91.9,117 ± 69.4,122 ± 79.7
+Recurrence,Workflow load (z-score),None,0.963 ± 0.608,-0.999 ± 0.244,0.0358 ± 0.802
