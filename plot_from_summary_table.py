@@ -12,6 +12,9 @@ import pandas as pd
 RIGID_COLOR = "#D68156"
 DEFORM_COLOR = "#4292C0"
 
+RIG_DEF_SPACING = 0.2
+
+SIG_DIST = 2.0
 
 mpl.rcParams.update({
     "text.usetex": True,
@@ -98,6 +101,32 @@ def add_extra_left_column(
         count += 1
 
 
+def plot_significance_at_end_of_errorbars(rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y, ax, rigid_sig, deform_sig) -> None:
+    """at the end of each SD bar on the right plot an asterisk with .text() if significant"""
+    for i in range(len(y)):
+        # once for rigid and once for deformable
+        if rigid_sig[i] == 1:
+            ax.text(
+                rigid_imp[i] + (rigid_imp_sd[i] if rigid_imp_sd[i]
+                                is not None else 0) + SIG_DIST,
+                y[i] - RIG_DEF_SPACING,
+                "*",
+                color="black",
+                fontsize=12,
+                va="center",
+            )
+        if deform_sig[i] == 1:
+            ax.text(
+                deform_imp[i] + (deform_imp_sd[i]
+                                 if deform_imp_sd[i] is not None else 0) + SIG_DIST,
+                y[i] + RIG_DEF_SPACING,
+                "*",
+                color="black",
+                fontsize=12,
+                va="center",
+            )
+
+
 def add_gaps_to_y() -> np.ndarray:
     # import numpy as np
 
@@ -115,6 +144,12 @@ def add_gaps_to_y() -> np.ndarray:
     y = np.array(y)
 
     return y
+
+
+def xerr_array(xerr: list[Optional[float]]) -> Optional[np.ndarray]:
+    if all(v is None for v in xerr):
+        return None
+    return np.array([np.nan if v is None else float(v) for v in xerr], dtype=float)
 
 
 def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
@@ -152,12 +187,7 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
 
     ax.axvline(0.0, linewidth=1.0)
 
-    def xerr_array(xerr: list[Optional[float]]) -> Optional[np.ndarray]:
-        if all(v is None for v in xerr):
-            return None
-        return np.array([np.nan if v is None else float(v) for v in xerr], dtype=float)
-
-        # ---- USER-PROVIDED SIGNIFICANCE (0 = not significant, 1 = significant) ----
+    # ---- USER-PROVIDED SIGNIFICANCE (0 = not significant, 1 = significant) ----
     rigid_sig = np.array(
         [
             0, 0, 0,
@@ -184,63 +214,15 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
     if len(rigid_sig) != len(y) or len(deform_sig) != len(y):
         raise ValueError("Significance vectors must match number of rows")
 
-    rigid_sig_mask = rigid_sig == 1
-    rigid_nsig_mask = ~rigid_sig_mask
-    deform_sig_mask = deform_sig == 1
-    deform_nsig_mask = ~deform_sig_mask
-
-    # ---- RIGID (blue): filled = significant ----
-    ax.errorbar(
-        np.array(rigid_imp, dtype=float)[rigid_sig_mask],
-        (y - 0.12)[rigid_sig_mask],
-        xerr=xerr_array(rigid_imp_sd)[rigid_sig_mask] if xerr_array(
-            rigid_imp_sd) is not None else None,
-        fmt="o",
-        capsize=2,
-        markerfacecolor=RIGID_COLOR,
-        markeredgecolor=RIGID_COLOR,
-        ecolor=RIGID_COLOR,
-        label="Rigid vs None",
-    )
-    ax.errorbar(
-        np.array(rigid_imp, dtype=float)[rigid_nsig_mask],
-        (y - 0.12)[rigid_nsig_mask],
-        xerr=xerr_array(rigid_imp_sd)[rigid_nsig_mask] if xerr_array(
-            rigid_imp_sd) is not None else None,
-        fmt="o",
-        capsize=2,
-        markerfacecolor="white",
-        markeredgecolor=RIGID_COLOR,
-        ecolor=RIGID_COLOR,
-    )
-
-    # ---- DEFORMABLE (orange): filled = significant ----
-    ax.errorbar(
-        np.array(deform_imp, dtype=float)[deform_sig_mask],
-        (y + 0.12)[deform_sig_mask],
-        xerr=xerr_array(deform_imp_sd)[deform_sig_mask] if xerr_array(
-            deform_imp_sd) is not None else None,
-        fmt="o",
-        capsize=2,
-        markerfacecolor=DEFORM_COLOR,
-        markeredgecolor=DEFORM_COLOR,
-        ecolor=DEFORM_COLOR,
-        label="Deformable vs None",
-    )
-    ax.errorbar(
-        np.array(deform_imp, dtype=float)[deform_nsig_mask],
-        (y + 0.12)[deform_nsig_mask],
-        xerr=xerr_array(deform_imp_sd)[deform_nsig_mask] if xerr_array(
-            deform_imp_sd) is not None else None,
-        fmt="o",
-        capsize=2,
-        markerfacecolor="white",
-        markeredgecolor=DEFORM_COLOR,
-        ecolor=DEFORM_COLOR,
-    )
+    # plot_errorbars_with_colour_significance(
+    #     rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y, ax, rigid_sig, deform_sig)
+    plot_normal_errorbars(
+        rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y, ax)
+    plot_significance_at_end_of_errorbars(
+        rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y, ax, rigid_sig, deform_sig)
 
     ax.set_yticks(y)
-    ax.set_yticklabels(metrics)
+    ax.set_yticklabels([m.replace('%', '\%') for m in metrics])
     ax.invert_yaxis()
     # ax.set_xlabel("Improvement vs None (signed so right = better)")
     # ax.set_title("Δ-from-None by task and metric")
@@ -261,6 +243,94 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
     fig.tight_layout()
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
+
+
+def plot_errorbars_with_colour_significance(rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y, ax, rigid_sig, deform_sig) -> None:
+    rigid_sig_mask = rigid_sig == 1
+    rigid_nsig_mask = ~rigid_sig_mask
+    deform_sig_mask = deform_sig == 1
+    deform_nsig_mask = ~deform_sig_mask
+
+    # ---- RIGID (blue): filled = significant ----
+    ax.errorbar(
+        np.array(rigid_imp, dtype=float)[rigid_sig_mask],
+        (y - RIG_DEF_SPACING)[rigid_sig_mask],
+        xerr=xerr_array(rigid_imp_sd)[rigid_sig_mask] if xerr_array(
+            rigid_imp_sd) is not None else None,
+        fmt="o",
+        capsize=2,
+        markerfacecolor=RIGID_COLOR,
+        markeredgecolor=RIGID_COLOR,
+        ecolor=RIGID_COLOR,
+        label="Rigid vs None",
+    )
+    ax.errorbar(
+        np.array(rigid_imp, dtype=float)[rigid_nsig_mask],
+        (y - RIG_DEF_SPACING)[rigid_nsig_mask],
+        xerr=xerr_array(rigid_imp_sd)[rigid_nsig_mask] if xerr_array(
+            rigid_imp_sd) is not None else None,
+        fmt="o",
+        capsize=2,
+        markerfacecolor="white",
+        markeredgecolor=RIGID_COLOR,
+        ecolor=RIGID_COLOR,
+    )
+
+    # ---- DEFORMABLE (orange): filled = significant ----
+    ax.errorbar(
+        np.array(deform_imp, dtype=float)[deform_sig_mask],
+        (y + RIG_DEF_SPACING)[deform_sig_mask],
+        xerr=xerr_array(deform_imp_sd)[deform_sig_mask] if xerr_array(
+            deform_imp_sd) is not None else None,
+        fmt="o",
+        capsize=2,
+        markerfacecolor=DEFORM_COLOR,
+        markeredgecolor=DEFORM_COLOR,
+        ecolor=DEFORM_COLOR,
+        label="Deformable vs None",
+    )
+    ax.errorbar(
+        np.array(deform_imp, dtype=float)[deform_nsig_mask],
+        (y + RIG_DEF_SPACING)[deform_nsig_mask],
+        xerr=xerr_array(deform_imp_sd)[deform_nsig_mask] if xerr_array(
+            deform_imp_sd) is not None else None,
+        fmt="o",
+        capsize=2,
+        markerfacecolor="white",
+        markeredgecolor=DEFORM_COLOR,
+        ecolor=DEFORM_COLOR,
+    )
+
+
+def plot_normal_errorbars(rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y, ax) -> None:
+    """Dont differentiate based on colour"""
+    # ---- RIGID ----
+    ax.errorbar(
+        np.array(rigid_imp, dtype=float),
+        (y - RIG_DEF_SPACING),
+        xerr=xerr_array(rigid_imp_sd) if xerr_array(
+            rigid_imp_sd) is not None else None,
+        fmt="o",
+        capsize=2,
+        markerfacecolor="white",
+        markeredgecolor=RIGID_COLOR,
+        ecolor=RIGID_COLOR,
+        label="Rigid vs None",
+    )
+
+    # ---- DEFORMABLE ----
+    ax.errorbar(
+        np.array(deform_imp, dtype=float),
+        (y + RIG_DEF_SPACING),
+        xerr=xerr_array(deform_imp_sd) if xerr_array(
+            deform_imp_sd) is not None else None,
+        fmt="o",
+        capsize=2,
+        markerfacecolor="white",
+        markeredgecolor=DEFORM_COLOR,
+        ecolor=DEFORM_COLOR,
+        label="Deformable vs None",
+    )
 
 
 if __name__ == "__main__":
