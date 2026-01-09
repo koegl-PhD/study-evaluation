@@ -2,4 +2,11 @@ __pycache__/*
 *.pyc
 
 *.tex
-*.csv
+
+descriptive_stats_1.csv
+descriptive_stats_test.csv
+descriptive_stats.csv
+duration.csv
+outputs/results.csv
+outputs/new/significance_all.csv
+outputs/new/significance_letters.csv
