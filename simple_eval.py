@@ -1,17 +1,15 @@
-from scipy.stats import mannwhitneyu
-from typing import Dict, Tuple
 import json
+import math
 
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
-
-import utils
-
-from typing import Tuple
+from scipy.stats import mannwhitneyu
 from scipy.stats import kruskal
 from statsmodels.stats.multitest import multipletests
+
+import utils
 
 try:
     import scikit_posthocs as sp
@@ -167,6 +165,15 @@ def significance_to_latex(df: pd.DataFrame, caption: str = "Pairwise significanc
     return latex
 
 
+def calculate_standard_error(s: np.ndarray) -> float:
+    p = s.mean()
+    n = s.shape[0]
+
+    se = math.sqrt(p * (1 - p) / n)
+
+    return se
+
+
 def main():
     # Load the results
     df = pd.read_csv('outputs/results.csv')
@@ -293,12 +300,24 @@ def main():
                     temp = temp.reindex(["NONE", "LINEAR", "NONLINEAR"])
                     temp = temp.to_dict()
                     std = {}
-                    std["NONE"] = df_filtered[df_filtered["transform_type"] ==
-                                              "NONE"][res].std()
-                    std["LINEAR"] = df_filtered[df_filtered["transform_type"] ==
-                                                "LINEAR"][res].std()
-                    std["NONLINEAR"] = df_filtered[df_filtered["transform_type"] ==
-                                                   "NONLINEAR"][res].std()
+
+                    if (task.lower() == 'lymph_node' or task.lower() == 'recurrence') and (res.lower().find('abs') != -1 or res.lower().find('recurrence') != -1):
+                        std_none = calculate_standard_error(
+                            df_filtered[df_filtered["transform_type"] == "NONE"][res].astype(int))
+                        std_linear = calculate_standard_error(
+                            df_filtered[df_filtered["transform_type"] == "LINEAR"][res].astype(int))
+                        std_nonlinear = calculate_standard_error(
+                            df_filtered[df_filtered["transform_type"] == "NONLINEAR"][res].astype(int))
+                    else:
+                        std_none = df_filtered[df_filtered["transform_type"] ==
+                                               "NONE"][res].std()
+                        std_linear = df_filtered[df_filtered["transform_type"] ==
+                                                 "LINEAR"][res].std()
+                        std_nonlinear = df_filtered[df_filtered["transform_type"] ==
+                                                    "NONLINEAR"][res].std()
+                    std["NONE"] = std_none
+                    std["LINEAR"] = std_linear
+                    std["NONLINEAR"] = std_nonlinear
 
                 # dict of dicts
                 if task not in means:
@@ -345,16 +364,16 @@ def main():
         means_all.append(means)
         stds_all.append(stds)
 
-    means = average_nested_dicts(means_all[0], means_all[1])
-    stds = average_nested_dicts(stds_all[0], stds_all[1])
+    # means = average_nested_dicts(means_all[0], means_all[1])
+    # stds = average_nested_dicts(stds_all[0], stds_all[1])
 
-    metrics_tex = utils.json_to_latex_tables(means_all[1], stds_all[1])
-    with open("outputs/new/metrics_table_inexperienced.tex", "w") as f:
-        f.write(metrics_tex)
+    # metrics_tex = utils.json_to_latex_tables(means_all[1], stds_all[1])
+    # with open("outputs/new/metrics_table_inexperienced.tex", "w") as f:
+    #     f.write(metrics_tex)
+    # metrics_tex = utils.json_to_latex_tables(means_all[0], stds_all[0])
+    # with open("outputs/new/metrics_table_experienced.tex", "w") as f:
+    #     f.write(metrics_tex)
     metrics_tex = utils.json_to_latex_tables(means_all[0], stds_all[0])
-    with open("outputs/new/metrics_table_experienced.tex", "w") as f:
-        f.write(metrics_tex)
-    metrics_tex = utils.json_to_latex_tables(means, stds)
     with open("outputs/new/metrics_table_all.tex", "w") as f:
         f.write(metrics_tex)
 
