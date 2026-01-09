@@ -335,5 +335,5 @@ def plot_normal_errorbars(rigid_imp, deform_imp, rigid_imp_sd, deform_imp_sd, y,
 
 if __name__ == "__main__":
     make_option1_delta_plot(
-        Path("table.csv"), Path("option1_delta_dotplot.png"))
+        Path("overview_table_from_latex_to_csv.csv"), Path("option1_delta_dotplot.png"))
     print("Wrote: option1_delta_dotplot.png")
