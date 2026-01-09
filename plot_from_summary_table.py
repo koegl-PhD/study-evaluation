@@ -1,3 +1,4 @@
+import matplotlib as mpl
 from typing import Sequence
 import re
 from dataclasses import dataclass
@@ -7,6 +8,16 @@ from typing import Optional, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+RIGID_COLOR = "#D68156"
+DEFORM_COLOR = "#4292C0"
+
+
+mpl.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern Roman"],
+})
 
 
 @dataclass(frozen=True)
@@ -55,13 +66,23 @@ def add_extra_left_column(
     ax: plt.Axes,
     y: np.ndarray,
     labels: Sequence[str],
-    x: float = -0.25,
+    x: float = -0.15,
 ) -> None:
     """Add a text column left of the y-axis, aligned with existing y-ticks."""
     if len(labels) != len(y):
         raise ValueError("labels must match y")
 
+    count = 0
+
     for yi, lab in zip(y, labels):
+
+        if count < 12:
+            color = "#09817b"
+        elif count < 15:
+            color = "#c2910b"
+        else:
+            color = "#be4f23"
+
         ax.text(
             x,
             float(yi),
@@ -70,7 +91,30 @@ def add_extra_left_column(
             ha="right",
             va="center",
             clip_on=False,
+            fontweight="bold",
+            color=color,
         )
+
+        count += 1
+
+
+def add_gaps_to_y() -> np.ndarray:
+    # import numpy as np
+
+    n = 18
+    group_size = 3
+    gap = 0.8
+
+    y = []
+    offset = 0.0
+    for i in range(n):
+        if i > 0 and i % group_size == 0:
+            offset += gap
+        y.append(i + offset)
+
+    y = np.array(y)
+
+    return y
 
 
 def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
@@ -101,6 +145,7 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
 
     labels = [f"{t} — {m}" for t, m in zip(tasks, metrics)]
     y = np.arange(len(labels))
+    y = add_gaps_to_y()
 
     fig_h = max(5.0, 0.35 * len(labels))
     fig, ax = plt.subplots(figsize=(10.8, fig_h))
@@ -152,9 +197,9 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
             rigid_imp_sd) is not None else None,
         fmt="o",
         capsize=2,
-        markerfacecolor="tab:blue",
-        markeredgecolor="tab:blue",
-        ecolor="tab:blue",
+        markerfacecolor=RIGID_COLOR,
+        markeredgecolor=RIGID_COLOR,
+        ecolor=RIGID_COLOR,
         label="Rigid vs None",
     )
     ax.errorbar(
@@ -165,8 +210,8 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
         fmt="o",
         capsize=2,
         markerfacecolor="white",
-        markeredgecolor="tab:blue",
-        ecolor="tab:blue",
+        markeredgecolor=RIGID_COLOR,
+        ecolor=RIGID_COLOR,
     )
 
     # ---- DEFORMABLE (orange): filled = significant ----
@@ -177,9 +222,9 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
             deform_imp_sd) is not None else None,
         fmt="o",
         capsize=2,
-        markerfacecolor="tab:orange",
-        markeredgecolor="tab:orange",
-        ecolor="tab:orange",
+        markerfacecolor=DEFORM_COLOR,
+        markeredgecolor=DEFORM_COLOR,
+        ecolor=DEFORM_COLOR,
         label="Deformable vs None",
     )
     ax.errorbar(
@@ -190,18 +235,18 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
         fmt="o",
         capsize=2,
         markerfacecolor="white",
-        markeredgecolor="tab:orange",
-        ecolor="tab:orange",
+        markeredgecolor=DEFORM_COLOR,
+        ecolor=DEFORM_COLOR,
     )
 
     ax.set_yticks(y)
     ax.set_yticklabels(metrics)
     ax.invert_yaxis()
-    ax.set_xlabel("Improvement vs None (signed so right = better)")
-    ax.set_title("Δ-from-None by task and metric")
-    ax.legend(loc="lower right")
+    # ax.set_xlabel("Improvement vs None (signed so right = better)")
+    # ax.set_title("Δ-from-None by task and metric")
+    ax.legend(loc="upper right")
 
-    y = np.arange(18)
+    # y = np.arange(18)
 
     labels_y = []
     for i in range(len(metrics)):
@@ -210,7 +255,7 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
         else:
             labels_y.append("")
 
-    add_extra_left_column(ax, y, labels_y, x=-0.30)
+    add_extra_left_column(ax, y, labels_y, x=-0.20)
     fig.subplots_adjust(left=0.45)
 
     fig.tight_layout()
