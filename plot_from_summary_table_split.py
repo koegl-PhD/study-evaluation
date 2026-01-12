@@ -17,11 +17,11 @@ RIG_DEF_SPACING = 0.2
 
 SIG_DIST = 2.0
 
-F_SIZE_TITLES = 20
-F_SIZE_LABELS = 14
-F_SIZE_TICKS = 14
-F_SIZE_LEGEND = 14
-F_SIZE_ASTERISKS = 18
+F_SIZE_TITLES = 26
+F_SIZE_LABELS = 20
+F_SIZE_TICKS = 20
+F_SIZE_LEGEND = 22
+F_SIZE_ASTERISKS = 20
 
 SIZE_WHISKERS = 4
 
@@ -67,6 +67,14 @@ def metric_direction(metric: str) -> str:
     if "localization rate" in m or "detection rate" in m:
         return "up"
     raise ValueError(f"Unknown metric direction for: {metric!r}")
+
+
+def improvement_sign(metric: str) -> int:
+    """Return -1 when improvements should plot to the left."""
+    m = metric.lower()
+    if "duration" in m or "workflow load" in m:
+        return -1
+    return 1
 
 
 def propagated_sd(sd_a: Optional[float], sd_b: Optional[float]) -> Optional[float]:
@@ -323,14 +331,15 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
         ci_data = json.load(f)
 
     dirs = [metric_direction(m) for m in metrics_all]
+    signs = [improvement_sign(m) for m in metrics_all]
 
     def improvement(n: float, x: float, d: str) -> float:
         return (n - x) if d == "down" else (x - n)
 
-    rigid_imp_all = [improvement(n.mean, r.mean, d)
-                     for n, r, d in zip(none_vals, rigid_vals, dirs)]
-    deform_imp_all = [improvement(n.mean, z.mean, d)
-                      for n, z, d in zip(none_vals, deform_vals, dirs)]
+    rigid_imp_all = [sign * improvement(n.mean, r.mean, d)
+                     for n, r, d, sign in zip(none_vals, rigid_vals, dirs, signs)]
+    deform_imp_all = [sign * improvement(n.mean, z.mean, d)
+                      for n, z, d, sign in zip(none_vals, deform_vals, dirs, signs)]
 
     rigid_imp_sd_all = [propagated_sd(n.sd, r.sd)
                         for n, r in zip(none_vals, rigid_vals)]
@@ -444,7 +453,7 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
         loc="lower center",
         ncol=2,
         frameon=False,
-        bbox_to_anchor=(0.55, -0.08),
+        bbox_to_anchor=(0.55, -0.16),
         fontsize=F_SIZE_LEGEND,
     )
 
