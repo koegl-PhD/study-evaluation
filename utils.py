@@ -1,3 +1,4 @@
+import ast
 import math
 
 from typing import Any, Dict, List, Tuple
@@ -102,6 +103,12 @@ def count_confusion_values(values: Dict[str, str]) -> Dict[str, Dict[str, int]]:
     return result
 
 
+def is_binary(task, metric) -> bool:
+    if ("recurrence" in task.lower() or "lymph node" in task.lower()) and 'correctness' in metric.lower():
+        return True
+    return False
+
+
 def convert_vals_to_percent(values: Dict[str, float]) -> Dict[str, str]:
     """
     Convert values to percentages.
@@ -139,12 +146,15 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
                 for k in keys:
                     v = vals[k]
                     if isinstance(v, (int, float)):
-                        if "recurrence" not in metric.lower():
+                        if is_binary(task, metric):
                             fmt_vals.append(
-                                f"{float_fmt.format(v)} ± {float_fmt.format(metrics_std[metric][k])}")
+                                f"{float_fmt.format(v)} ± [{float_fmt.format(float(metrics_std[metric][k].split('~')[0]))}, {float_fmt.format(float(metrics_std[metric][k].split('~')[1]) )}]")
                         else:
                             fmt_vals.append(
-                                f"{float_fmt.format(v)}")
+                                f"{float_fmt.format(v)} ± {float_fmt.format(metrics_std[metric][k])}")
+                        # else:
+                        # fmt_vals.append(
+                        # f"{float_fmt.format(v)}")
                     else:
                         fmt_vals.append("-")
                 metric_rows.append(
@@ -183,8 +193,15 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
             nl_strip = nl.split("±")[0].strip() if "±" in nl else nl
             nl_std = nl.split("±")[1].strip() if "±" in nl else ""
             values = [float(n_strip), float(l_strip), float(nl_strip)]
-            stds = [float(n_std) if n_std else 0.0, float(l_std)
-                    if l_std else 0.0, float(nl_std) if nl_std else 0.0]
+
+            if is_binary(task, metric):
+                n_stds = ast.literal_eval(n_std)
+                l_std = ast.literal_eval(l_std)
+                nl_std = ast.literal_eval(nl_std)
+                stds = [n_stds, l_std, nl_std]
+            else:
+                stds = [float(n_std) if n_std else 0.0, float(
+                    l_std) if l_std else 0.0, float(nl_std) if nl_std else 0.0]
 
             m = metric.lower()
             if ("duration" in m or "distance" in m or "rel" in m
@@ -198,10 +215,8 @@ def json_to_latex_tables(data_mean: Dict[str, Any], data_std: Dict[str, Any], fl
 
             formatted = []
             for j, (val_stripped, std_val) in enumerate(zip(values, stds)):
-                if "recurrence" in task.lower() and "Correctness" in metric:
-                    val_str = f"{100*val_stripped:.3g}\\%"
-                elif "Correctness" in metric:
-                    val_str = f"{100*val_stripped:.3g}\\% ± {100*std_val:.3g}\\%"
+                if "Correctness" in metric:
+                    val_str = f"{100*val_stripped:.3g}\\% [{100*std_val[0]:.3g}, {100*std_val[1]:.3g}]"
                 else:
                     val_str = f"{val_stripped:.3g} ± {std_val}"
                 if j in best_idxs:
