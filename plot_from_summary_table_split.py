@@ -388,8 +388,8 @@ def make_option1_delta_plot(csv_path: Path, out_path: Path) -> None:
         return "accuracy"
 
     panel_defs: list[tuple[str, str]] = [
-        ("accuracy", "Accuracy"),
-        ("duration", "Duration"),
+        ("accuracy", "Task accuracy"),
+        ("duration", "Task duration"),
         ("workflow", "Workflow load"),
     ]
 
