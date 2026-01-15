@@ -164,7 +164,9 @@ def plot_tre_robustness(df: pd.DataFrame, out_path: str, frac: float = 0.25, n_b
                         color=mpl.colors.to_rgba(exp_colors[exp], 1.0))
         ax.axvline(5.0, linestyle="--", linewidth=1, color="red")
         ax.axvline(10.0, linestyle="--", linewidth=1, color="red")
-        ax.set_title(exp)
+
+        ax.set_title("Final-year medical students" if exp ==
+                     "Inexperienced" else "Radiology residents")
         ax.set_xlabel("TRE (mm)")
         ax.set_xlim(tre_grid.min(), tre_grid.max())
 
@@ -182,6 +184,8 @@ def plot_tre_robustness(df: pd.DataFrame, out_path: str, frac: float = 0.25, n_b
     axes[0].set_ylabel("Matching error (mm)")
     fig.tight_layout()
     fig.savefig(out_path, dpi=300)
+
+    
 
     print(range_vals)
 
@@ -392,14 +396,22 @@ def plot_tre_violins(df: pd.DataFrame, out_path: str) -> None:
     )
 
     # replace your title-setting loop with this to place titles inside each subplot
+    c = 0
     for ax in g.axes.flat:
         exp = ax.get_title().split(" = ")[-1]
         ax.set_title("")  # remove default title
+
+        if c == 0:
+            title = "Final-year medical students"
+        else:
+            title = "Radiology residents"
         ax.text(
-            0.5, 0.97, titles.get(exp, exp),  # y < 1.0 puts it inside
+            0.5, 0.97, title,  # y < 1.0 puts it inside
             transform=ax.transAxes, ha="center", va="top",
             fontsize=14, fontweight="bold"
         )
+
+        c += 1
 
     for ax in g.axes.flat:
         ax.xaxis.set_ticks_position("both")
@@ -423,7 +435,12 @@ def main() -> None:
 
     mpl.rcParams.update({
         "text.usetex": True,
-        "font.family": "serif",
+        "text.latex.preamble": r"""
+            \usepackage{helvet}
+            \usepackage{sansmath}
+            \sansmath
+            \renewcommand{\familydefault}{\sfdefault}
+        """,
         "axes.unicode_minus": False,
         "axes.labelsize": 14,
         "xtick.labelsize": 12,
@@ -450,7 +467,7 @@ def main() -> None:
 
     plot_tre_violins(df_all2, "outputs/fig_tre_violin_by_experience.png")
 
-    plot_tre_robustness(df_all2, "outputs/fig_tre_robustness_loess_new.png")
+    plot_tre_robustness(df_all2, "outputs/fig_tre_robustness_loess.png")
 
     x = 0
 

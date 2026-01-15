@@ -25,12 +25,18 @@ F_SIZE_ASTERISKS = 20
 
 SIZE_WHISKERS = 4
 
+ASTERISK_VERT = 6.0
+
 XErr = Union[float, Tuple[float, float]]
 
 mpl.rcParams.update({
     "text.usetex": True,
-    "font.family": "serif",
-    "font.serif": ["Computer Modern Roman"],
+    "font.family": "sans-serif",
+    "text.latex.preamble": r"""
+        \usepackage{helvet}
+        \usepackage{sansmath}
+        \sansmath
+    """,
 })
 
 
@@ -151,7 +157,7 @@ def plot_significance_at_end_of_errorbars(
             ax.annotate(
                 "*",
                 xy=(x_end, float(y[i] - RIG_DEF_SPACING)),
-                xytext=(dx_points, 0.0),
+                xytext=(dx_points, -ASTERISK_VERT),
                 textcoords="offset points",
                 ha="left",
                 va="center",
@@ -165,7 +171,7 @@ def plot_significance_at_end_of_errorbars(
             ax.annotate(
                 "*",
                 xy=(x_end, float(y[i] + RIG_DEF_SPACING)),
-                xytext=(dx_points, 0.0),
+                xytext=(dx_points, -ASTERISK_VERT),
                 textcoords="offset points",
                 ha="left",
                 va="center",
